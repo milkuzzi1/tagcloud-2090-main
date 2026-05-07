@@ -16,6 +16,7 @@
 | `tagcloud@.service` | Шаблон systemd для multi-instance (горизонтальное масштабирование под 1000+ concurrent). |
 | `mail-server.md` | Гайд по локальному Postfix + OpenDKIM (всё на одной машине). |
 | `setup-mailserver.sh` | Идемпотентный установщик Postfix + OpenDKIM. |
+| `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01 / smarthost для почты). |
 
 ## Первый деплой (типовой self-host)
 
@@ -150,6 +151,20 @@ systemctl restart tagcloud
 Можно временно деплоить по IP без TLS — раскомментируйте блок `:80` в
 `Caddyfile.example` и удалите блок `yourdomain.tld {…}`. После регистрации
 домена верните как было и перезагрузите Caddy.
+
+## Динамический IP
+
+Если у сервера нет постоянного публичного IP (домашний сервер, residential-
+провайдер, CGNAT), используйте отдельный гайд: `deploy/dynamic-ip.md`. Он
+покрывает:
+
+- DDNS на Cloudflare API (systemd-таймер обновляет A-запись каждые 5 минут);
+- проброс портов 80/443 на роутере;
+- Caddy с DNS-01 challenge (сертификат не зависит от доступности 80-го порта);
+- альтернативу через **Cloudflare Tunnel** — без проброса портов вообще,
+  работает за CGNAT;
+- релей почты через smarthost (Resend / Brevo / Mailgun / SES), потому что
+  на динамическом IP свой 25-й порт обычно зарезан и сразу попадает в SBL.
 
 ## Масштабирование под 1000+ concurrent
 
