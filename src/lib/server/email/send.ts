@@ -20,9 +20,10 @@ export type SendResultsInput = {
 
 export async function sendResultsEmail(input: SendResultsInput): Promise<void> {
   const t = getTransporter();
-  if (!t) throw new Error('SMTP не настроен (SMTP_HOST/USER/PASSWORD пусты)');
+  if (!t) throw new Error('SMTP не настроен (SMTP_HOST пуст)');
 
-  const fromAddr = env.SMTP_FROM ?? env.SMTP_USER!;
+  const fromAddr = env.SMTP_FROM ?? env.SMTP_USER;
+  if (!fromAddr) throw new Error('SMTP_FROM не задан (и SMTP_USER пуст)');
   await t.sendMail({
     from: fromAddr,
     to: input.to,
