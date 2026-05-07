@@ -1,4 +1,4 @@
-## Инструкции по деплою нет, поскольку нет сервера и домена
+## Инструкции по деплою — `deploy/README.md` (всё на одной VPS, домен `2090.fun`).
 
 ## Локальный запуск
 
@@ -9,10 +9,16 @@ npm install
 # 2. Скопировать env
 cp .env.example .env
 
-# 3. Заполнить в .env
-SMTP_USER=адрес_почты_для_входа
-SMTP_PASSWORD=пароль_приложения
-SMTP_FROM=почта_отправителя
+# 3. (Опционально) поправить SMTP в .env
+# По умолчанию app ходит на 127.0.0.1:25 без авторизации — ожидается
+# локальный Postfix. Если его нет — отправка писем (verification, итоги
+# опросов) будет падать; всё остальное работает. Для разработки можно
+# поднять MailHog: `docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog`
+# и выставить SMTP_HOST=127.0.0.1 / SMTP_PORT=1025.
+SMTP_HOST=127.0.0.1
+SMTP_PORT=25
+SMTP_SECURE=false
+SMTP_FROM="Tagcloud <noreply@2090.fun>"
 
 # 4. Запуск Postgres + Redis
 npm run db:up

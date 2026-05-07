@@ -61,9 +61,10 @@ export function verificationText(input: VerificationEmailInput): string {
 
 export async function sendVerificationEmail(input: VerificationEmailInput): Promise<void> {
   const t = getTransporter();
-  if (!t) throw new Error('SMTP не настроен (SMTP_HOST/USER/PASSWORD пусты)');
+  if (!t) throw new Error('SMTP не настроен (SMTP_HOST пуст)');
 
-  const fromAddr = env.SMTP_FROM ?? env.SMTP_USER!;
+  const fromAddr = env.SMTP_FROM ?? env.SMTP_USER;
+  if (!fromAddr) throw new Error('SMTP_FROM не задан (и SMTP_USER пуст)');
   const logo = await getLogoPng();
 
   await t.sendMail({
