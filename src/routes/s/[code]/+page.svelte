@@ -340,11 +340,8 @@
       class="qr"
       src={qrPngBase64Data}
       alt="QR код опроса"
-      use:copyOnClick={{
-        kind: 'image',
-        image: qrPngBase64Data,
-        fallbackText: respondentUrl
-      }}
+      title={respondentUrl}
+      use:copyOnClick={{ kind: 'text', text: respondentUrl }}
     />
   </section>
 {/if}

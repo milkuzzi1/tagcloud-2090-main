@@ -243,11 +243,8 @@
         class="qr"
         src={qrPngBase64Data}
         alt="QR код опроса"
-        use:copyOnClick={{
-          kind: 'image',
-          image: qrPngBase64Data,
-          fallbackText: respondentUrl
-        }}
+        title={respondentUrl}
+        use:copyOnClick={{ kind: 'text', text: respondentUrl }}
       />
     </div>
   </aside>
@@ -255,10 +252,14 @@
 
 <style>
   /* Полное полотно: убираем root-layout container и его padding,
-     чтобы сайдбар лёг ровно к правому краю viewport'а. */
+     чтобы сайдбар лёг ровно к правому краю viewport'а, а облако
+     заняло всю оставшуюся ширину. !important нужен потому, что
+     селектор .container в /+layout.svelte получает Svelte-хеш
+     (.container.svelte-XXXX, специфичность 0,2,0) и без !important
+     перебивает наш :global(main.container) (специфичность 0,1,1). */
   :global(main.container) {
-    max-width: none;
-    padding: 0;
+    max-width: none !important;
+    padding: 0 !important;
     min-height: calc(100vh - 130px);
   }
 
