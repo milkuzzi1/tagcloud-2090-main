@@ -17,6 +17,7 @@
 | `mail-server.md` | Гайд по локальному Postfix + OpenDKIM (всё на одной машине). |
 | `setup-mailserver.sh` | Идемпотентный установщик Postfix + OpenDKIM. |
 | `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01 / smarthost для почты). |
+| `windows.md` | Гайд по деплою на Windows 10/11 (WSL2 + Ubuntu или нативный Windows: NSSM, Task Scheduler, Memurai). |
 
 ## Первый деплой (типовой self-host)
 
@@ -165,6 +166,20 @@ systemctl restart tagcloud
   работает за CGNAT;
 - релей почты через smarthost (Resend / Brevo / Mailgun / SES), потому что
   на динамическом IP свой 25-й порт обычно зарезан и сразу попадает в SBL.
+
+## Windows 10 / 11
+
+Если деплой идёт на Windows-машину (домашний ПК / ноут), смотрите
+`deploy/windows.md`. Гайд покрывает оба сценария:
+
+- **WSL2 + Ubuntu** (рекомендуется): ставим Ubuntu внутри Windows, а
+  внутри неё применяем обычный `deploy/dynamic-ip.md`. Дополнительно —
+  `netsh portproxy` для проброса 80/443 с Windows-хоста в WSL и
+  Task Scheduler для автозапуска WSL при загрузке Windows.
+- **Чистый Windows**: Node + Postgres + Caddy + cloudflared нативно;
+  `systemd`-юниты заменяются Windows-службами через NSSM, DDNS — на
+  PowerShell + Task Scheduler, Postfix отсутствует (письма идут
+  напрямую через smarthost из приложения).
 
 ## Масштабирование под 1000+ concurrent
 
