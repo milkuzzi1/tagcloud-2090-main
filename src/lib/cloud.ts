@@ -167,43 +167,49 @@ export function weightFactor(words: CloudWord[], baseSize: number) {
 }
 
 /**
- * Шкалирует count в нормированную «интенсивность» t ∈ [0, 1] по той же
- * лог-шкале, что и `weightFactor`. t=0 — самое редкое слово (или count≤0),
- * t=1 — самое частое в наборе. Используется для font-weight и
- * пропорциональной обводки в рендере облака.
+ * Шкалирует count в нормированную «интенсивность» t ∈ [0, 1] по РАНГУ
+ * слова в отсортированном по убыванию count'а списке. Топ-слово получает 1,
+ * последнее — 0, остальные равномерно по позиции. Слова с одинаковым
+ * count получают одинаковую интенсивность (берём ранг первого вхождения).
+ *
+ * Раньше тут была лог-шкала по count. На скошенных распределениях
+ * (1 популярное слово + длинный хвост близких counts, типичный реальный
+ * случай) лог сжимал хвост в почти одинаковые значения (≈0.15…0.3),
+ * и из 4 бакетов font-weight + проп.обводки визуально выходило только
+ * «жирно/нежирно». Rank-based даёт гарантированно разную интенсивность
+ * у соседних по позиции слов и видимый плавный градиент по всей шкале.
  */
 export function weightIntensityFor(words: CloudWord[]): (count: number) => number {
-  let max = 1;
-  for (let i = 0; i < words.length; i++) {
-    if (words[i][1] > max) max = words[i][1];
+  const sorted = [...words].sort((a, b) => b[1] - a[1]);
+  const n = Math.max(1, sorted.length - 1);
+  const countToIntensity = new Map<number, number>();
+  for (let i = 0; i < sorted.length; i++) {
+    const c = sorted[i][1];
+    if (!countToIntensity.has(c)) {
+      countToIntensity.set(c, 1 - i / n);
+    }
   }
-  const denom = Math.log2(max + 1);
   return (count) => {
     if (count <= 0) return 0;
-    const t = Math.log2(count + 1) / denom;
-    return Math.max(0, Math.min(1, t));
+    const v = countToIntensity.get(count);
+    return v ?? 0;
   };
 }
 
 /**
- * Подбор font-weight по популярности — линейная интерполяция между 400 и 700
- * по `weightIntensityFor`, округлённая до ближайшего шага 100.
+ * Подбор font-weight по популярности — интерполяция между 400 и 700 по
+ * `weightIntensityFor` с шагом 50 (400, 450, 500, …, 700).
  *
- * Само по себе font-weight на canvas не даёт плавной градации: системные
- * sans-serif (Liberation/DejaVu/Arial) обычно содержат только 400 и 700
- * варианты, и CSS-спецификация заставляет браузер «выбрать ближайший
- * существующий»: на практике вес ниже 600 рендерится как 400, остальное —
- * как 700, и облако из 4 бакетов превращается в визуальное «жирно/нежирно».
+ * На canvas с моно-весовыми системными шрифтами (DejaVu, Liberation, Arial)
+ * браузер маппит любой вес < 600 на 400, ≥ 600 на 700, и облако из бакетов
+ * превращается в «жирно/нежирно». На variable-fonts (Inter, San Francisco
+ * на macOS, Segoe UI Variable на Windows) шаг 50 уже даёт видимую плавность.
  *
- * Поэтому в `cloud-render.ts` и `workers/render-worker.mjs` поверх font-weight
- * накладывается ещё пропорциональный strokeText: он работает на любом
- * шрифте и даёт настоящую плавную шкалу веса, согласованную с интенсивностью.
+ * В рендере (`cloud-render.ts`, `workers/render-worker.mjs`) поверх font-weight
+ * накладывается пропорциональный strokeText той же краской — он работает
+ * на любом шрифте и вытягивает плавность даже на моно-весовом fallback'е.
  */
 export function fontWeightFor(words: CloudWord[]): (count: number) => number {
   const intensity = weightIntensityFor(words);
-  return (count) => {
-    const t = intensity(count);
-    // 400, 500, 600, 700 — стандартные для большинства шрифтов шаги.
-    return 400 + Math.round(t * 3) * 100;
-  };
+  return (count) => 400 + Math.round(intensity(count) * 6) * 50;
 }

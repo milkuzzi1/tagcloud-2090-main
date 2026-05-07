@@ -108,29 +108,46 @@ function weightFactor(words, baseSize) {
     baseSize * (1 + (Math.log2(count + 1) / denom) * (SIZE_MULTIPLIER - 1));
 }
 
-// t ∈ [0, 1] по той же лог-шкале, что в src/lib/cloud.ts. Используется
-// и для font-weight, и для пропорциональной обводки в рендере облака.
+// Rank-based интенсивность (см. src/lib/cloud.ts за обоснование):
+// ранжируем слова по count desc, топ → 1.0, последнее → 0.0,
+// равные count'ы — одинаковая интенсивность (по рангу первого
+// вхождения). Гарантирует видимый шаг между соседями по рангу
+// даже на скошенных распределениях.
 function weightIntensityFor(words) {
-  const max = Math.max(1, ...words.map((w) => w[1]));
-  const denom = Math.log2(max + 1);
+  const sorted = [...words].sort((a, b) => b[1] - a[1]);
+  const n = Math.max(1, sorted.length - 1);
+  const countToIntensity = new Map();
+  for (let i = 0; i < sorted.length; i++) {
+    const c = sorted[i][1];
+    if (!countToIntensity.has(c)) {
+      countToIntensity.set(c, 1 - i / n);
+    }
+  }
   return (count) => {
     if (count <= 0) return 0;
-    const t = Math.log2(count + 1) / denom;
-    return Math.max(0, Math.min(1, t));
+    const v = countToIntensity.get(count);
+    return v ?? 0;
   };
 }
 
-// Округляем интенсивность до ближайшего шага 100 в диапазоне 400–700.
-// На mono-weight шрифтах (DejaVu в docker, Liberation в базовых Linux
-// образах) этот вес всё равно рендерится как 400/700; плавную
-// градацию вывозит strokeText ниже.
+// Шаг 50 (400, 450, 500, …, 700) — видимо на variable-fonts; на mono-weight
+// фоллбеке (DejaVu в docker) это всё равно мапится в 400/700,
+// поэтому плавность вывозит strokeText ниже.
 function fontWeightFor(words) {
   const intensity = weightIntensityFor(words);
-  return (count) => 400 + Math.round(intensity(count) * 3) * 100;
+  return (count) => 400 + Math.round(intensity(count) * 6) * 50;
 }
 
 // Совпадает с MAX_STROKE_RATIO в src/lib/cloud-render.ts.
-const MAX_STROKE_RATIO = 0.045;
+const MAX_STROKE_RATIO = 0.085;
+
+// Совпадает с strokeFactor() в src/lib/cloud-render.ts.
+function strokeFactor(intensity) {
+  return 0.20 + 0.80 * Math.sqrt(Math.max(0, Math.min(1, intensity)));
+}
+
+// Вес fillText: всегда 400. Весовой градиент формируется strokeText'ом.
+const FILL_WEIGHT = 400;
 
 function drawEmpty(width, height, message) {
   const canvas = createCanvas(width, height);
@@ -246,14 +263,15 @@ export default async function render(job) {
           const text = w.text ?? '';
           const intensity = intensities(w.count ?? 0);
           const c = color(text, w.count ?? 0);
-          ctx.font = `${w.weight} ${size}px ${FONT}`;
+          // Вес fillText всегда FILL_WEIGHT — гладкий градиент через strokeText.
+          ctx.font = `${FILL_WEIGHT} ${size}px ${FONT}`;
           ctx.fillStyle = c;
           ctx.save();
           ctx.translate(w.x ?? 0, w.y ?? 0);
           ctx.rotate(((w.rotate ?? 0) * Math.PI) / 180);
           // Плавная градация веса: пропорциональный stroke той же
           // краской поверх fill — согласовано с cloud-render.ts.
-          const strokeW = size * MAX_STROKE_RATIO * intensity;
+          const strokeW = size * MAX_STROKE_RATIO * strokeFactor(intensity);
           if (strokeW > 0) {
             ctx.strokeStyle = c;
             ctx.lineWidth = strokeW;

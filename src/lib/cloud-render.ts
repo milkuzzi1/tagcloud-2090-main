@@ -16,14 +16,39 @@ import cloud from 'd3-cloud';
 import type { CloudWord, ColorScheme } from './types/cloud';
 import { colorPicker, fontWeightFor, weightFactor, weightIntensityFor } from './cloud';
 
-// Максимальная толщина обводки относительно font-size. На системных
-// sans-serif шрифтах (Liberation/DejaVu/Arial) канвасный font-weight
-// округляется до 400/700, поэтому смысл «плавного» веса передаём через
-// strokeText той же краской поверх fillText. 0.045 подобран эмпирически:
-// у самого популярного слова мазок виден как «extra-bold», но не залипает.
-const MAX_STROKE_RATIO = 0.045;
+// Максимальная толщина обводки относительно font-size. Плавный градиент
+// веса в облаке делаем ПОЛНОСТЬЮ через strokeText: fillText
+// всегда рисуем весом 400, поверх накладываем strokeText той же
+// краской с линией шириной по ранг-интенсивности. Так избегаем
+// бинарного скачка 400/700 от рендеринга системных фонтов: вес всех
+// слов воспринимается как непрерывный градиент по толщине штриха.
+//
+// 0.085: у топ-слова обводка ~8.5% font-size = визуальный extra-bold,
+// но влазит в padding=10 d3-cloud (спрайт маски измеряется по
+// fontWeight из weights() — это даёт доп. воздуха для жирных слов).
+const MAX_STROKE_RATIO = 0.085;
 
-const FONT = 'sans-serif';
+// Кривая «интенсивность → множитель толщины». sqrt растягивает
+// нижние ранги вверх (без этого их обводка < 1 пкс), базовый 0.20
+// гарантирует самым лёгким словам видимый штрих «медиум»,
+// чтобы хвост облака не сливался в «один вес = regular».
+function strokeFactor(intensity: number): number {
+  return 0.2 + 0.8 * Math.sqrt(Math.max(0, Math.min(1, intensity)));
+}
+
+// Вес fillText. Всегда 400 — весь весовой градиент даёт strokeText.
+// Спрайты d3-cloud вычисляются по weights() (400…700) — это
+// даёт «оверразмер» маски для жирных слов, куда помещается
+// толстый strokeText без пересечения с соседями.
+const FILL_WEIGHT = 400;
+
+// Синхронизировано с var(--font-sans) в src/app.css. Inter при отсутствии
+// @font-face используется только если установлен локально; иначе браузер
+// сразу спускается на системные варианты. На macOS это San Francisco
+// (веса 100–900), на Windows 10/11 — Segoe UI Variable. На Linux падаем
+// на generic sans-serif (DejaVu) — там весы 400/700, поэтому strokeText
+// вывозит плавность.
+const FONT = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 /**
  * mulberry32 — компактный детерминированный PRNG. Тот же seed/реализация
@@ -217,19 +242,17 @@ export async function renderCloud(
   for (const w of placed) {
     const text = w.text ?? '';
     const size = w.size ?? baseSize;
-    const weight = w.weight ?? 400;
     const intensity = w.intensity ?? 0;
     const rot = w.rotate ?? 0;
     const color = pickColor(text, w.count ?? 0);
     ctx.save();
     ctx.translate(w.x ?? 0, w.y ?? 0);
     ctx.rotate((rot * Math.PI) / 180);
-    ctx.font = `${weight} ${size}px ${FONT}`;
+    // Всегда вес 400 для fillText — весовой градиент формирует strokeText
+    // ниже (объяснение в шапке файла).
+    ctx.font = `${FILL_WEIGHT} ${size}px ${FONT}`;
     ctx.fillStyle = color;
-    // Плавная градация веса: пропорциональный stroke той же краской поверх
-    // fill. На системах, где font-weight по факту бинарный (400/700),
-    // именно strokeText передаёт «вес» через толщину штриха.
-    const strokeW = size * MAX_STROKE_RATIO * intensity;
+    const strokeW = size * MAX_STROKE_RATIO * strokeFactor(intensity);
     if (strokeW > 0) {
       ctx.strokeStyle = color;
       ctx.lineWidth = strokeW;
