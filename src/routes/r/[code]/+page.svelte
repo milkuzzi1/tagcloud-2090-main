@@ -192,14 +192,14 @@
 
 {#if screen === 'closed'}
   <div class="state state-closed">
-    <div class="state-icon">⏳</div>
+    <div class="state-icon" aria-hidden="true">⏳</div>
     <h1>Опрос завершён</h1>
     <p class="muted">Голосование больше не принимается.</p>
     <a class="btn btn-primary" href={`/c/${survey.code}`}>Посмотреть облако</a>
   </div>
 {:else if screen === 'sent' || screen === 'already'}
   <div class="state {screen === 'already' ? 'state-already' : 'state-sent'}">
-    <div class="state-icon">✓</div>
+    <div class="state-icon" aria-hidden="true">✓</div>
     {#if screen === 'already'}
       <h1>Ты уже отвечал</h1>
       <p class="muted">Ваш ответ записан. Спасибо за участие!</p>
@@ -268,7 +268,7 @@
       </fieldset>
 
       {#if errorMessage}
-        <div class="alert alert-error">{errorMessage}</div>
+        <div class="alert alert-error" role="alert">{errorMessage}</div>
       {/if}
 
       <div class="actions">
@@ -390,7 +390,7 @@
     padding: 4px 8px 4px 12px;
     border: 1px solid var(--c-border);
     border-radius: 999px;
-    background: var(--c-bg-2, #f5f5f5);
+    background: var(--c-surface);
     font-size: 0.95rem;
   }
   .chip-x {

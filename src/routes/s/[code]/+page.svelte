@@ -258,7 +258,7 @@
 </header>
 
 {#if confirmFinish}
-  <div class="alert alert-warn">
+  <div class="alert alert-warn" role="alertdialog" aria-label="Подтверждение завершения опроса">
     <div class="alert-text">
       <strong>Завершить опрос?</strong>
       Голосование закроется, агрегат отправится на email. Отменить нельзя.
@@ -273,18 +273,18 @@
 {/if}
 
 {#if finishError}
-  <div class="alert alert-error">{finishError}</div>
+  <div class="alert alert-error" role="alert">{finishError}</div>
 {/if}
 {#if retryError}
-  <div class="alert alert-error">{retryError}</div>
+  <div class="alert alert-error" role="alert">{retryError}</div>
 {/if}
 
 {#if survey.status === 'sent'}
-  <div class="alert alert-success">
+  <div class="alert alert-success" role="status">
     Опрос завершён. Письмо с результатами отправлено на <b>{survey.creatorEmail}</b>.
   </div>
 {:else if survey.status === 'failed'}
-  <div class="alert alert-warn">
+  <div class="alert alert-warn" role="status">
     <div class="alert-text">
       Опрос завершён, но <b>письмо не дошло</b>. Можно скачать CSV ниже или повторить отправку.
     </div>
@@ -295,7 +295,7 @@
     </div>
   </div>
 {:else if survey.status === 'expired'}
-  <div class="alert alert-warn">
+  <div class="alert alert-warn" role="status">
     <div class="alert-text">
       Голосование закрыто, идёт обработка результатов и отправка email. Если состояние не меняется
       больше минуты — нажмите ниже.

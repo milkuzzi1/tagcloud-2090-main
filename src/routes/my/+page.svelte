@@ -216,9 +216,8 @@
           </span>
         </div>
         <div class="actions">
-          <a class="btn btn-primary btn-sm" href={`/s/${s.code}`}>Дашборд</a>
           {#if s.status === 'active'}
-            <button class="btn btn-ghost btn-sm" onclick={(e) => copyLink(s.code, e)}>
+            <button class="btn btn-primary btn-sm" onclick={(e) => copyLink(s.code, e)}>
               {copying === s.code ? 'Скопировано' : 'Копировать ссылку'}
             </button>
             {#if confirmCode === s.code}

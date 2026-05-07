@@ -297,7 +297,7 @@
   </details>
 
   {#if errorMessage}
-    <div class="alert alert-error">{errorMessage}</div>
+    <div class="alert alert-error" role="alert">{errorMessage}</div>
   {/if}
 
   <button type="submit" class="btn btn-primary btn-lg" disabled={submitting}>
@@ -360,7 +360,7 @@
     padding: 4px;
   }
   .seg {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     padding: 8px 14px;
     background: transparent;
@@ -522,8 +522,20 @@
   }
 
   @media (max-width: 640px) {
+    /* На узких экранах разрешаем перенос длинных лейблов внутри кнопки в две строки. */
     .seg {
       flex-basis: calc(50% - 4px);
+      white-space: normal;
+      line-height: 1.25;
+      min-height: 36px;
+    }
+  }
+
+  /* Иначе iOS Safari зумит при фокусе на number-input с font-size <16px. */
+  @supports (-webkit-touch-callout: none) {
+    .max-words-input,
+    .max-answers-input {
+      font-size: 16px;
     }
   }
 </style>

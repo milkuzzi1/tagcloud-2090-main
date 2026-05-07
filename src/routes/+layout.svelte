@@ -19,14 +19,19 @@
   }
 </script>
 
+<a class="skip-link" href="#main">Перейти к содержимому</a>
+
 <header class="topbar">
   <a class="brand" href={data.user ? '/my' : '/'}>
     <img class="brand-logo" src="/logo2090.png" alt="Школа №2090" />
     <span class="brand-text">Облако тегов</span>
   </a>
 
-  <nav class="nav">
+  <nav class="nav" aria-label="Основная навигация">
     {#if data.user}
+      <a class="nav-link" href="/my" aria-current={page.route.id === '/my' ? 'page' : undefined}>
+        Мои опросы
+      </a>
       <button type="button" class="btn btn-ghost btn-sm" onclick={logout}>Выход</button>
     {:else}
       <a class="nav-link" href="/login">Войти</a>
@@ -34,7 +39,7 @@
   </nav>
 </header>
 
-<main class="container" class:fullbleed={isFullbleed}>
+<main id="main" class="container" class:fullbleed={isFullbleed}>
   {@render children()}
 </main>
 
@@ -95,6 +100,11 @@
   }
   .nav-link:hover {
     text-decoration: underline;
+  }
+  .nav-link[aria-current='page'] {
+    color: var(--c-navy);
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
 
   .container {

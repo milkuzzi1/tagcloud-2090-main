@@ -111,7 +111,7 @@
         />
       </label>
       {#if errorMessage}
-        <div class="alert alert-error">{errorMessage}</div>
+        <div class="alert alert-error" role="alert">{errorMessage}</div>
       {/if}
       <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
         {submitting ? 'Создаём…' : 'Создать аккаунт'}

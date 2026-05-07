@@ -27,15 +27,21 @@
 <div class="auth">
   <h1>Подтверждение email</h1>
   {#if data.code === 'missing'}
-    <div class="alert alert-error">{data.message}. Откройте ссылку из письма целиком.</div>
+    <div class="alert alert-error" role="alert">
+      {data.message}. Откройте ссылку из письма целиком.
+    </div>
   {:else if data.code === 'invalid'}
-    <div class="alert alert-error">Ссылка недействительна. Возможно, она была изменена.</div>
+    <div class="alert alert-error" role="alert">
+      Ссылка недействительна. Возможно, она была изменена.
+    </div>
   {:else if data.code === 'used'}
-    <div class="alert alert-error">
+    <div class="alert alert-error" role="alert">
       Эта ссылка уже была использована. Если у вас не получается войти — запросите новую.
     </div>
   {:else if data.code === 'expired'}
-    <div class="alert alert-error">Срок действия ссылки истёк. Запросите новое письмо ниже.</div>
+    <div class="alert alert-error" role="alert">
+      Срок действия ссылки истёк. Запросите новое письмо ниже.
+    </div>
   {/if}
 
   {#if data.code === 'expired' || data.code === 'used' || data.code === 'invalid'}

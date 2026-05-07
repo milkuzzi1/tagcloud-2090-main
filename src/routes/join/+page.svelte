@@ -50,7 +50,7 @@
       inputmode="text"
     />
     {#if error}
-      <div class="alert alert-error">{error}</div>
+      <div class="alert alert-error" role="alert">{error}</div>
     {/if}
     <button type="submit" class="btn btn-primary btn-lg btn-block" disabled={code.length !== 6}>
       Пройти опрос
@@ -83,7 +83,7 @@
     text-transform: uppercase;
     letter-spacing: 0.4em;
     font-size: 1.5rem;
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, 'Menlo', monospace);
+    font-family: var(--font-mono);
     font-weight: 600;
     padding-block: var(--space-4);
   }

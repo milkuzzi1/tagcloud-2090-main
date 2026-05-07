@@ -85,10 +85,10 @@
       />
     </label>
     {#if errorMessage}
-      <div class="alert alert-error">{errorMessage}</div>
+      <div class="alert alert-error" role="alert">{errorMessage}</div>
     {/if}
     {#if needsVerification}
-      <div class="alert alert-warn">
+      <div class="alert alert-warn" role="alert">
         <p>Email не подтверждён. Откройте письмо со ссылкой или запросите новое.</p>
         <button
           type="button"

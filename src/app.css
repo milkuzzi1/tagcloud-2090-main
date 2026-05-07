@@ -7,8 +7,10 @@
   --c-surface: #f7f8fa;
   --c-surface-hover: #eef0f4;
   --c-text: #1a1a1a;
-  --c-muted: #6b7280;
+  --c-muted: #525968;
   --c-border: #e5e7eb;
+  --c-info-bg: #dbeafe;
+  --c-info-fg: #1e3a8a;
   --c-danger: #dc2626;
   --c-danger-bg: #fef2f2;
   --c-danger-border: #fecaca;
@@ -228,8 +230,8 @@ a:focus-visible {
   background: currentColor;
 }
 .badge-active {
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: var(--c-info-bg);
+  color: var(--c-info-fg);
 }
 .badge-success {
   background: var(--c-success-bg);
@@ -242,6 +244,24 @@ a:focus-visible {
 .badge-muted {
   background: #f3f4f6;
   color: #4b5563;
+}
+
+/* skip-link для клавиатурной/скринридер-навигации */
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -100px;
+  padding: 8px 14px;
+  background: var(--c-navy);
+  color: #fff;
+  border-radius: var(--radius);
+  z-index: 100;
+  text-decoration: none;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: var(--space-2);
+  text-decoration: none;
 }
 
 /* ─── Mobile ─────────────────────────────────────────────────────────────── */

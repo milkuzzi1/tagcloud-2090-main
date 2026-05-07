@@ -161,7 +161,12 @@
 -->
 <div class="presentation">
   <section class="cloud-area" aria-label="Облако ответов">
-    <canvas bind:this={canvas} width="1600" height="900"></canvas>
+    <canvas
+      bind:this={canvas}
+      width="1600"
+      height="900"
+      aria-label={`Облако слов: ${totalVotes} ${votePlural(totalVotes)}`}
+    ></canvas>
 
     {#if activeWords.length === 0}
       <div class="empty">
@@ -189,13 +194,13 @@
 
     <div class="overlay question-text">{activeQuestion?.text}</div>
 
-    <div class="overlay vote-count">
+    <div class="overlay vote-count" aria-live="polite">
       {totalVotes}
       {votePlural(totalVotes)}
     </div>
 
     <div class="overlay actions">
-      <a class="btn btn-ghost btn-sm" href={`/s/${survey.code}`}>В дашборд</a>
+      <a class="btn btn-ghost btn-sm action-dashboard" href={`/s/${survey.code}`}>В дашборд</a>
       <button type="button" class="btn btn-ghost btn-sm" onclick={toggleFullscreen}>
         {isFullscreen ? 'Свернуть' : 'Полный экран'}
       </button>
@@ -269,10 +274,13 @@
     background: #fff;
     overflow: hidden;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
   canvas {
     width: 100%;
     height: 100%;
+    flex: 1 1 auto;
     display: block;
   }
   .empty {
@@ -464,7 +472,9 @@
     }
     .cloud-area {
       order: 1;
-      min-height: 60vh;
+      /* aspect-ratio даёт квадратнее облако на узких экранах, чтобы canvas был читаемым. */
+      aspect-ratio: 4 / 3;
+      min-height: auto;
     }
     .question-text {
       max-width: calc(100% - var(--space-4) * 2);
@@ -476,6 +486,24 @@
     }
     .qr {
       max-width: 220px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    /* На узких экранах overlay-actionы перекрывают заголовок вопроса.
+       «В дашборд» уже есть в навигации, скрываем продублированную ссылку. */
+    .actions .action-dashboard {
+      display: none;
+    }
+    .question-text {
+      font-size: 0.875rem;
+      padding: 6px 10px;
+    }
+    .vote-count {
+      bottom: var(--space-2);
+      left: var(--space-2);
+      font-size: 0.875rem;
+      padding: 4px 10px;
     }
   }
 </style>
