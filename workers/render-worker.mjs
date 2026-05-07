@@ -177,122 +177,151 @@ export default async function render(job) {
   const limit = Math.max(1, maxWords ?? 50);
   const sorted = [...words].sort((a, b) => b[1] - a[1]).slice(0, limit);
 
-  const wf = weightFactor(sorted, 28);
   const color = colorPicker(scheme, palette, sorted);
   const weights = fontWeightFor(sorted);
   const intensities = weightIntensityFor(sorted);
+  // Базовый размер шрифта для PNG; должен быть согласован с дефолтом
+  // weightFactor(sorted, BASE_SIZE) — см. ниже в runLayout().
+  const BASE_SIZE = 28;
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, width, height);
 
-  // Детерминированный mulberry32 — нужен ТОЛЬКО для `.rotate`, чтобы
-  // ~40% слов получали ±90° при `allowVertical=true`, и при этом
-  // распределение было воспроизводимым между сайтом и письмом.
-  let rngState = 0xc0de;
-  const rotateRng = () => {
-    rngState = (rngState + 0x6d2b79f5) >>> 0;
-    let t = rngState;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  // d3-cloud МОЛЧА выкидывает слова, которые не помещаются на canvas.
+  // Чтобы PNG для письма содержал ровно столько слов, сколько запрошено
+  // (а не «сколько влезло»), запускаем layout итеративно: при недосыпе
+  // уменьшаем шрифты на коэффициент SCALE_STEP и пробуем снова, пока
+  // все слова не разместятся либо не достигнем MIN_SCALE. Логика
+  // полностью симметрична клиентскому `src/lib/cloud-render.ts`, чтобы
+  // сайт и письмо показывали одно и то же количество слов.
+  const SCALE_STEP = 0.9;
+  const MIN_SCALE = 0.35;
+  const MAX_ATTEMPTS = 8;
 
-  await new Promise((resolve, reject) => {
-    const layout = cloud()
-      .size([width, height])
-      .canvas(() => createCanvas(1, 1))
-      .words(
-        sorted.map(([text, count]) => ({
-          text,
-          size: wf(count),
-          count,
-          weight: weights(count)
-        }))
-      )
-      // Padding=10: совпадает с клиентом (`src/lib/cloud-render.ts`).
-      // Корректность коллизий обеспечивает патч d3-cloud
-      // (`patches/d3-cloud+1.2.9.patch`):
-      //   1) форсирует textBaseline='middle' в sprite — без этого
-      //      sprite-маска коллизий стояла на 0.3*fontSize выше глифа,
-      //      и крупные/повёрнутые слова визуально наезжали на соседей;
-      //   2) добавляет 2*padding к sprite container ДО rotation-матрицы,
-      //      чтобы halo strokeText помещался в маску по обеим осям;
-      //   3) обновляет seenRow только на непустых строках — иначе
-      //      пустые строки снизу спрайта попадали в bbox, маска
-      //      получалась несимметричной, и слова сверху от текущего
-      //      проходили коллизию, но визуально перекрывались.
-      .padding(10)
-      // d3-cloud использует random() для:
-      //   1) стартовой позиции каждого слова —
-      //        d.x = (size[0] * (random()+0.5)) >> 1 → [0.25w; 0.75w];
-      //   2) направления спирали (CW/CCW) в place().
-      // Из-за пункта 1 даже самое крупное слово оказывалось НЕ в
-      // центре, а где-то в центральной полосе. Возврат 0.5 даёт
-      // `d.x = w/2, d.y = h/2` — все слова стартуют ровно в центре.
-      // Сортировка по убыванию count + sequential placement в d3-cloud
-      // гарантирует радиальную иерархию: топ-слово в центре, остальные
-      // отодвигаются на спирали по мере коллизий.
-      .random(() => 0.5)
-      // Если опрос разрешает вертикали — ~40% слов ставятся под ±90°
-      // (равновероятно влево/вправо), остальные — горизонтально.
-      // Используем отдельный mulberry32, чтобы не пересекаться с
-      // принудительным 0.5 для placement.
-      // Самое популярное слово (первое после сортировки) всегда
-      // горизонтально — иначе при длинном топ-слове оно не помещается
-      // в высоту canvas в повёрнутом виде и теряется.
-      .rotate((d, i) => {
-        if (!allowVertical) return 0;
-        if (i === 0) return 0;
-        if (rotateRng() >= 0.4) return 0;
-        return rotateRng() < 0.5 ? -90 : 90;
-      })
-      .font(FONT)
-      .fontSize((d) => d.size)
-      .fontWeight((d) => String(d.weight))
-      .on('end', (placed) => {
-        ctx.save();
-        ctx.translate(width / 2, height / 2);
-        // textBaseline='middle' соответствует sprite-маске d3-cloud
-        // (см. `patches/d3-cloud+1.2.9.patch` — там форсируется тот же
-        // baseline). Это устраняет рассинхрон между позицией маски
-        // коллизий и пользовательского рендера ≈0.3*fontSize.
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (const w of placed) {
-          const size = w.size ?? 28;
-          const text = w.text ?? '';
-          const intensity = intensities(w.count ?? 0);
-          const c = color(text, w.count ?? 0);
-          // Вес fillText всегда FILL_WEIGHT — гладкий градиент через strokeText.
-          ctx.font = `${FILL_WEIGHT} ${size}px ${FONT}`;
-          ctx.fillStyle = c;
-          ctx.save();
-          ctx.translate(w.x ?? 0, w.y ?? 0);
-          ctx.rotate(((w.rotate ?? 0) * Math.PI) / 180);
-          // Плавная градация веса: пропорциональный stroke той же
-          // краской поверх fill — согласовано с cloud-render.ts.
-          const strokeW = size * MAX_STROKE_RATIO * strokeFactor(intensity);
-          if (strokeW > 0) {
-            ctx.strokeStyle = c;
-            ctx.lineWidth = strokeW;
-            ctx.lineJoin = 'round';
-            ctx.miterLimit = 2;
-            ctx.strokeText(text, 0, 0);
-          }
-          ctx.fillText(text, 0, 0);
-          ctx.restore();
-        }
-        ctx.restore();
-        resolve();
-      });
-    try {
-      layout.start();
-    } catch (e) {
-      reject(e);
+  function runLayout(scale) {
+    const wf = weightFactor(sorted, BASE_SIZE * scale);
+    // Детерминированный mulberry32 — нужен ТОЛЬКО для `.rotate`, чтобы
+    // ~40% слов получали ±90° при `allowVertical=true`, и при этом
+    // распределение было воспроизводимым между сайтом и письмом.
+    // Пересоздаём на каждой попытке, иначе состояние утечёт между
+    // прогонами и одно и то же слово получит разные углы.
+    let rngState = 0xc0de;
+    const rotateRng = () => {
+      rngState = (rngState + 0x6d2b79f5) >>> 0;
+      let t = rngState;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    return new Promise((resolve, reject) => {
+      const layout = cloud()
+        .size([width, height])
+        .canvas(() => createCanvas(1, 1))
+        .words(
+          sorted.map(([text, count]) => ({
+            text,
+            size: wf(count),
+            count,
+            weight: weights(count)
+          }))
+        )
+        // Padding=10: совпадает с клиентом (`src/lib/cloud-render.ts`).
+        // Корректность коллизий обеспечивает патч d3-cloud
+        // (`patches/d3-cloud+1.2.9.patch`):
+        //   1) форсирует textBaseline='middle' в sprite — без этого
+        //      sprite-маска коллизий стояла на 0.3*fontSize выше глифа,
+        //      и крупные/повёрнутые слова визуально наезжали на соседей;
+        //   2) добавляет 2*padding к sprite container ДО rotation-матрицы,
+        //      чтобы halo strokeText помещался в маску по обеим осям;
+        //   3) обновляет seenRow только на непустых строках — иначе
+        //      пустые строки снизу спрайта попадали в bbox, маска
+        //      получалась несимметричной, и слова сверху от текущего
+        //      проходили коллизию, но визуально перекрывались.
+        .padding(10)
+        // d3-cloud использует random() для:
+        //   1) стартовой позиции каждого слова —
+        //        d.x = (size[0] * (random()+0.5)) >> 1 → [0.25w; 0.75w];
+        //   2) направления спирали (CW/CCW) в place().
+        // Из-за пункта 1 даже самое крупное слово оказывалось НЕ в
+        // центре, а где-то в центральной полосе. Возврат 0.5 даёт
+        // `d.x = w/2, d.y = h/2` — все слова стартуют ровно в центре.
+        // Сортировка по убыванию count + sequential placement в d3-cloud
+        // гарантирует радиальную иерархию: топ-слово в центре, остальные
+        // отодвигаются на спирали по мере коллизий.
+        .random(() => 0.5)
+        // Если опрос разрешает вертикали — ~40% слов ставятся под ±90°
+        // (равновероятно влево/вправо), остальные — горизонтально.
+        // Используем отдельный mulberry32, чтобы не пересекаться с
+        // принудительным 0.5 для placement.
+        // Самое популярное слово (первое после сортировки) всегда
+        // горизонтально — иначе при длинном топ-слове оно не помещается
+        // в высоту canvas в повёрнутом виде и теряется.
+        .rotate((d, i) => {
+          if (!allowVertical) return 0;
+          if (i === 0) return 0;
+          if (rotateRng() >= 0.4) return 0;
+          return rotateRng() < 0.5 ? -90 : 90;
+        })
+        .font(FONT)
+        .fontSize((d) => d.size)
+        .fontWeight((d) => String(d.weight))
+        .on('end', (placed) => resolve(placed));
+      try {
+        layout.start();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  let placed = [];
+  let scale = 1;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    placed = await runLayout(scale);
+    if (placed.length >= sorted.length) break;
+    scale *= SCALE_STEP;
+    if (scale < MIN_SCALE) {
+      scale = MIN_SCALE;
+      placed = await runLayout(scale);
+      break;
     }
-  });
+  }
+
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  // textBaseline='middle' соответствует sprite-маске d3-cloud
+  // (см. `patches/d3-cloud+1.2.9.patch` — там форсируется тот же
+  // baseline). Это устраняет рассинхрон между позицией маски
+  // коллизий и пользовательского рендера ≈0.3*fontSize.
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const w of placed) {
+    const size = w.size ?? BASE_SIZE;
+    const text = w.text ?? '';
+    const intensity = intensities(w.count ?? 0);
+    const c = color(text, w.count ?? 0);
+    // Вес fillText всегда FILL_WEIGHT — гладкий градиент через strokeText.
+    ctx.font = `${FILL_WEIGHT} ${size}px ${FONT}`;
+    ctx.fillStyle = c;
+    ctx.save();
+    ctx.translate(w.x ?? 0, w.y ?? 0);
+    ctx.rotate(((w.rotate ?? 0) * Math.PI) / 180);
+    // Плавная градация веса: пропорциональный stroke той же
+    // краской поверх fill — согласовано с cloud-render.ts.
+    const strokeW = size * MAX_STROKE_RATIO * strokeFactor(intensity);
+    if (strokeW > 0) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = strokeW;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.strokeText(text, 0, 0);
+    }
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
 
   return canvas.toBuffer('image/png');
 }
