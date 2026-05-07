@@ -1,7 +1,16 @@
 <script lang="ts">
   import '../app.css';
   import { goto, invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
   let { children, data } = $props();
+
+  // Режим презентации (/p/[code]) рисует облако на всю ширину viewport'а,
+  // поэтому снимаем max-width/padding с main.container только для этого
+  // маршрута. Раньше сброс жил в +page.svelte через :global(main.container)
+  // и протекал: ховер по ссылке «Режим презентации» триггерил SvelteKit
+  // preload, а preload добавлял CSS в <head> навсегда (до следующего
+  // full reload), и все страницы ломались по всей ширине.
+  const isFullbleed = $derived(page.route.id === '/p/[code]');
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -25,7 +34,7 @@
   </nav>
 </header>
 
-<main class="container">
+<main class="container" class:fullbleed={isFullbleed}>
   {@render children()}
 </main>
 
@@ -94,6 +103,13 @@
     padding: var(--space-8) var(--space-6);
     min-height: calc(100vh - 130px);
   }
+  /* Режим презентации: облако + сайдбар прижимаются
+     к краям экрана. Класс ставится по route.id, так что SSR
+     рендерит сразу в full-bleed без flash'а. */
+  .container.fullbleed {
+    max-width: none;
+    padding: 0;
+  }
   .footer {
     border-top: 1px solid var(--c-border);
     padding: var(--space-4) var(--space-6);
@@ -115,6 +131,10 @@
     }
     .container {
       padding: var(--space-6) var(--space-4);
+      min-height: calc(100vh - 160px);
+    }
+    .container.fullbleed {
+      padding: 0;
       min-height: calc(100vh - 160px);
     }
   }

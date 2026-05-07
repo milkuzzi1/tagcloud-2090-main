@@ -153,14 +153,11 @@
 
 <!--
   Режим презентации: облако — full-bleed на левой колонке, сайдбар
-  с реквизитами опроса прижат к правому краю окна (border-left, без
-  внешнего padding). Заголовок опроса, подсказка про стрелки и кнопки
-  копирования убраны: вкладки/текст вопроса/счётчик голосов выведены
-  оверлеем поверх облака; для копирования кода/ссылки/QR — hover-tooltip
-  («Скопировать» → «Скопировано»), action в $lib/actions/copy-on-click.
-
-  :global(main.container) сбрасывается только пока этот компонент
-  смонтирован — на остальных страницах сохраняется обычная ширина.
+  с реквизитами опроса прижат к правому краю окна. Сброс max-width
+  и padding у main.container живёт в +layout.svelte (выбирается по
+  page.route.id), чтобы preload страницы не ломал остальные роуты.
+  Для копирования кода/ссылки/QR — hover-tooltip («Скопировать» →
+  «Скопировано»), action в $lib/actions/copy-on-click.
 -->
 <div class="presentation">
   <section class="cloud-area" aria-label="Облако ответов">
@@ -244,25 +241,21 @@
         src={qrPngBase64Data}
         alt="QR код опроса"
         title={respondentUrl}
-        use:copyOnClick={{ kind: 'text', text: respondentUrl }}
+        use:copyOnClick={{
+          kind: 'image',
+          image: qrPngBase64Data,
+          fallbackText: respondentUrl
+        }}
       />
     </div>
   </aside>
 </div>
 
 <style>
-  /* Полное полотно: убираем root-layout container и его padding,
-     чтобы сайдбар лёг ровно к правому краю viewport'а, а облако
-     заняло всю оставшуюся ширину. !important нужен потому, что
-     селектор .container в /+layout.svelte получает Svelte-хеш
-     (.container.svelte-XXXX, специфичность 0,2,0) и без !important
-     перебивает наш :global(main.container) (специфичность 0,1,1). */
-  :global(main.container) {
-    max-width: none !important;
-    padding: 0 !important;
-    min-height: calc(100vh - 130px);
-  }
-
+  /* Full-bleed раскладку выводит +layout.svelte через .container.fullbleed,
+     когда page.route.id === '/p/[code]'. Раньше был :global(main.container)
+     с !important в этом файле — он протекал через SvelteKit preload
+     на все страницы до следующего full reload. */
   .presentation {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px;

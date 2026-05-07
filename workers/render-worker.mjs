@@ -108,17 +108,29 @@ function weightFactor(words, baseSize) {
     baseSize * (1 + (Math.log2(count + 1) / denom) * (SIZE_MULTIPLIER - 1));
 }
 
-function fontWeightFor(words) {
+// t ∈ [0, 1] по той же лог-шкале, что в src/lib/cloud.ts. Используется
+// и для font-weight, и для пропорциональной обводки в рендере облака.
+function weightIntensityFor(words) {
   const max = Math.max(1, ...words.map((w) => w[1]));
   const denom = Math.log2(max + 1);
   return (count) => {
+    if (count <= 0) return 0;
     const t = Math.log2(count + 1) / denom;
-    if (t >= 0.85) return 700;
-    if (t >= 0.55) return 600;
-    if (t >= 0.25) return 500;
-    return 400;
+    return Math.max(0, Math.min(1, t));
   };
 }
+
+// Округляем интенсивность до ближайшего шага 100 в диапазоне 400–700.
+// На mono-weight шрифтах (DejaVu в docker, Liberation в базовых Linux
+// образах) этот вес всё равно рендерится как 400/700; плавную
+// градацию вывозит strokeText ниже.
+function fontWeightFor(words) {
+  const intensity = weightIntensityFor(words);
+  return (count) => 400 + Math.round(intensity(count) * 3) * 100;
+}
+
+// Совпадает с MAX_STROKE_RATIO в src/lib/cloud-render.ts.
+const MAX_STROKE_RATIO = 0.045;
 
 function drawEmpty(width, height, message) {
   const canvas = createCanvas(width, height);
@@ -149,6 +161,7 @@ export default async function render(job) {
   const wf = weightFactor(sorted, 28);
   const color = colorPicker(scheme, palette, sorted);
   const weights = fontWeightFor(sorted);
+  const intensities = weightIntensityFor(sorted);
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -229,12 +242,26 @@ export default async function render(job) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         for (const w of placed) {
-          ctx.font = `${w.weight} ${w.size}px ${FONT}`;
-          ctx.fillStyle = color(w.text ?? '', w.count ?? 0);
+          const size = w.size ?? 28;
+          const text = w.text ?? '';
+          const intensity = intensities(w.count ?? 0);
+          const c = color(text, w.count ?? 0);
+          ctx.font = `${w.weight} ${size}px ${FONT}`;
+          ctx.fillStyle = c;
           ctx.save();
           ctx.translate(w.x ?? 0, w.y ?? 0);
           ctx.rotate(((w.rotate ?? 0) * Math.PI) / 180);
-          ctx.fillText(w.text ?? '', 0, 0);
+          // Плавная градация веса: пропорциональный stroke той же
+          // краской поверх fill — согласовано с cloud-render.ts.
+          const strokeW = size * MAX_STROKE_RATIO * intensity;
+          if (strokeW > 0) {
+            ctx.strokeStyle = c;
+            ctx.lineWidth = strokeW;
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+            ctx.strokeText(text, 0, 0);
+          }
+          ctx.fillText(text, 0, 0);
           ctx.restore();
         }
         ctx.restore();

@@ -132,14 +132,44 @@ export const copyOnClick: Action<HTMLElement, CopyParams> = (node, initial) => {
   };
 };
 
-async function copyImage(dataUrlOrUrl: string): Promise<boolean> {
+/**
+ * Декодируем base64 data URL в Blob синхронно, без `fetch().then(r => r.blob())`.
+ * Это важно для сохранения user-gesture контекста: `navigator.clipboard.write`
+ * требует, чтобы вызов произошёл синхронно внутри обработчика клика. Любой
+ * `await` (в т.ч. `await fetch(...)` и `await res.blob()`) до момента вызова
+ * write увеличивает шанс, что браузер посчитает гesture истёкшим и тихо
+ * откажет — Chrome иногда работает, Safari/Firefox строже. С синхронным
+ * декодом write вызывается сразу, и работает стабильно.
+ */
+function dataUrlToBlob(dataUrl: string): Blob | null {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+  if (!m) return null;
+  const [, mime, b64] = m;
   try {
-    if (typeof ClipboardItem === 'undefined') return false;
-    const res = await fetch(dataUrlOrUrl);
-    const blob = await res.blob();
-    // Большинство браузеров требуют image/png для clipboard.
-    if (blob.type !== 'image/png') return false;
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  } catch {
+    return null;
+  }
+}
+
+async function copyImage(dataUrlOrUrl: string): Promise<boolean> {
+  if (typeof ClipboardItem === 'undefined') return false;
+
+  // QR на /p/[code] и /s/[code] всегда приходит как `data:image/png;base64,…`
+  // из qrPngBase64() — расшифровываем синхронно. Если это вдруг http(s)-URL
+  // (на случай будущего рефакторинга), fallback'имся на text — image
+  // через fetch ненадёжно из-за gesture-таймаута.
+  if (!dataUrlOrUrl.startsWith('data:')) return false;
+
+  const blob = dataUrlToBlob(dataUrlOrUrl);
+  // Большинство браузеров принимают только image/png для clipboard.
+  if (!blob || blob.type !== 'image/png') return false;
+
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
     return true;
   } catch {
     return false;

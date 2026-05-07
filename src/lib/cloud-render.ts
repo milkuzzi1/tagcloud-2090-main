@@ -14,7 +14,14 @@
  */
 import cloud from 'd3-cloud';
 import type { CloudWord, ColorScheme } from './types/cloud';
-import { colorPicker, fontWeightFor, weightFactor } from './cloud';
+import { colorPicker, fontWeightFor, weightFactor, weightIntensityFor } from './cloud';
+
+// Максимальная толщина обводки относительно font-size. На системных
+// sans-serif шрифтах (Liberation/DejaVu/Arial) канвасный font-weight
+// округляется до 400/700, поэтому смысл «плавного» веса передаём через
+// strokeText той же краской поверх fillText. 0.045 подобран эмпирически:
+// у самого популярного слова мазок виден как «extra-bold», но не залипает.
+const MAX_STROKE_RATIO = 0.045;
 
 const FONT = 'sans-serif';
 
@@ -55,6 +62,7 @@ interface PlacedWord {
   rotate?: number;
   count?: number;
   weight?: number;
+  intensity?: number;
 }
 
 /**
@@ -105,6 +113,7 @@ export async function renderCloud(
   const wf = weightFactor(sorted, baseSize);
   const pickColor = colorPicker(scheme, palette, sorted);
   const weights = fontWeightFor(sorted);
+  const intensities = weightIntensityFor(sorted);
 
   // Для `.rotate` оставляем настоящий mulberry32 — нам нужна
   // случайная (но детерминированная) ориентация ±90° у части слов
@@ -133,7 +142,8 @@ export async function renderCloud(
             text,
             size: wf(count),
             count,
-            weight: weights(count)
+            weight: weights(count),
+            intensity: intensities(count)
           }))
         )
         // Padding=10 — компромисс между плотностью облака и видимым
@@ -208,12 +218,25 @@ export async function renderCloud(
     const text = w.text ?? '';
     const size = w.size ?? baseSize;
     const weight = w.weight ?? 400;
+    const intensity = w.intensity ?? 0;
     const rot = w.rotate ?? 0;
+    const color = pickColor(text, w.count ?? 0);
     ctx.save();
     ctx.translate(w.x ?? 0, w.y ?? 0);
     ctx.rotate((rot * Math.PI) / 180);
     ctx.font = `${weight} ${size}px ${FONT}`;
-    ctx.fillStyle = pickColor(text, w.count ?? 0);
+    ctx.fillStyle = color;
+    // Плавная градация веса: пропорциональный stroke той же краской поверх
+    // fill. На системах, где font-weight по факту бинарный (400/700),
+    // именно strokeText передаёт «вес» через толщину штриха.
+    const strokeW = size * MAX_STROKE_RATIO * intensity;
+    if (strokeW > 0) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = strokeW;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.strokeText(text, 0, 0);
+    }
     ctx.fillText(text, 0, 0);
     ctx.restore();
   }

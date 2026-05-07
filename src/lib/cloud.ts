@@ -167,21 +167,43 @@ export function weightFactor(words: CloudWord[], baseSize: number) {
 }
 
 /**
- * Подбор font-weight по популярности. Самые редкие слова рисуются обычным
- * 400, самые частые — 700 (bold), середина — 500/600. Это усиливает
- * визуальную иерархию за счёт начертания дополнительно к размеру.
+ * Шкалирует count в нормированную «интенсивность» t ∈ [0, 1] по той же
+ * лог-шкале, что и `weightFactor`. t=0 — самое редкое слово (или count≤0),
+ * t=1 — самое частое в наборе. Используется для font-weight и
+ * пропорциональной обводки в рендере облака.
  */
-export function fontWeightFor(words: CloudWord[]): (count: number) => number {
+export function weightIntensityFor(words: CloudWord[]): (count: number) => number {
   let max = 1;
   for (let i = 0; i < words.length; i++) {
     if (words[i][1] > max) max = words[i][1];
   }
   const denom = Math.log2(max + 1);
   return (count) => {
-    const t = Math.log2(count + 1) / denom; // 0..1
-    if (t >= 0.85) return 700;
-    if (t >= 0.55) return 600;
-    if (t >= 0.25) return 500;
-    return 400;
+    if (count <= 0) return 0;
+    const t = Math.log2(count + 1) / denom;
+    return Math.max(0, Math.min(1, t));
+  };
+}
+
+/**
+ * Подбор font-weight по популярности — линейная интерполяция между 400 и 700
+ * по `weightIntensityFor`, округлённая до ближайшего шага 100.
+ *
+ * Само по себе font-weight на canvas не даёт плавной градации: системные
+ * sans-serif (Liberation/DejaVu/Arial) обычно содержат только 400 и 700
+ * варианты, и CSS-спецификация заставляет браузер «выбрать ближайший
+ * существующий»: на практике вес ниже 600 рендерится как 400, остальное —
+ * как 700, и облако из 4 бакетов превращается в визуальное «жирно/нежирно».
+ *
+ * Поэтому в `cloud-render.ts` и `workers/render-worker.mjs` поверх font-weight
+ * накладывается ещё пропорциональный strokeText: он работает на любом
+ * шрифте и даёт настоящую плавную шкалу веса, согласованную с интенсивностью.
+ */
+export function fontWeightFor(words: CloudWord[]): (count: number) => number {
+  const intensity = weightIntensityFor(words);
+  return (count) => {
+    const t = intensity(count);
+    // 400, 500, 600, 700 — стандартные для большинства шрифтов шаги.
+    return 400 + Math.round(t * 3) * 100;
   };
 }
