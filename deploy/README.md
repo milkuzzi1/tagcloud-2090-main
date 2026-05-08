@@ -14,9 +14,8 @@
 | `tagcloud-backup.timer` | systemd timer — ежедневно в 03:30 UTC. |
 | `backup.env.example` | Конфиг бэкапа (DATABASE_URL + restic-репозиторий + пароль). |
 | `tagcloud@.service` | Шаблон systemd для multi-instance (горизонтальное масштабирование под 1000+ concurrent). |
-| `mail-server.md` | Гайд по локальному Postfix + OpenDKIM (всё на одной машине). |
-| `setup-mailserver.sh` | Идемпотентный установщик Postfix + OpenDKIM. |
-| `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01 / smarthost для почты). |
+| `mail-server.md` | Гайд по настройке Gmail SMTP (App Password + DNS). |
+| `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01). |
 
 ## Первый деплой (типовой self-host)
 
@@ -27,8 +26,7 @@ DNS A-запись `yourdomain.tld → IP` уже создана.
 
 ```bash
 apt update
-apt install -y postgresql redis-server caddy restic \
-  postfix opendkim opendkim-tools mailutils
+apt install -y postgresql redis-server caddy restic
 # Node 22 через NodeSource (или nvm — на ваш вкус):
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
@@ -93,26 +91,42 @@ curl http://127.0.0.1:3000/healthz   # должно вернуть "ok"
 curl http://127.0.0.1:3000/readyz    # должно вернуть {"ok":true,...}
 ```
 
-### 7. Mail-сервер (Postfix + OpenDKIM)
+### 7. Mail (Gmail SMTP)
 
-App шлёт письма на `127.0.0.1:25` без авторизации; Postfix на той же
-машине доверяет loopback (`mynetworks=127.0.0.0/8`), подписывает
-исходящее DKIM-ом и релеит наружу. Подробный гайд (DNS-записи,
-конфиги, проверки) — `deploy/mail-server.md`. Быстрый путь:
+Все письма (verification, итоги опросов) уходят через Gmail SMTP.
+Никаких локальных Postfix/OpenDKIM не требуется — приложение
+авторизуется в Gmail по App Password и отправляет напрямую.
+
+Краткий путь:
+
+1. Включить 2-Step Verification у Google-аккаунта, который будет
+   отправителем (для production удобнее завести отдельный
+   `noreply@…` через Google Workspace; для small-scale годится и
+   обычный `@gmail.com`).
+2. Создать App Password: https://myaccount.google.com/apppasswords
+   (обычный пароль не подойдёт — Google блокирует «less secure apps»).
+3. В `/etc/tagcloud/tagcloud.env` подставить:
+
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_SECURE=true
+   SMTP_USER=your-account@gmail.com
+   SMTP_PASSWORD=<App Password>
+   SMTP_FROM="Tagcloud <your-account@gmail.com>"
+   ```
+
+4. `systemctl restart tagcloud`.
+
+Подробности (SPF/DKIM/DMARC, Workspace, лимиты, send-as alias) —
+`deploy/mail-server.md`.
+
+Проверка:
 
 ```bash
-sudo bash deploy/setup-mailserver.sh 2090.fun
-# Скрипт ставит postfix + opendkim, генерирует DKIM-ключ и печатает
-# DNS-записи (MX / SPF / DMARC / DKIM), которые нужно добавить
-# у регистратора 2090.fun.
-```
-
-После добавления DNS-записей и истечения TTL — проверка:
-
-```bash
-echo "Test mail" | mail -s "tagcloud test" you@example.com
-# В заголовках Authentication-Results на стороне получателя должно быть
-# spf=pass dkim=pass dmarc=pass.
+journalctl -u tagcloud -n 100 | grep -iE "smtp|mail"
+# Триггерим письмо (например, регистрация нового пользователя через UI)
+# и смотрим, что в логе нет ошибок отправки.
 ```
 
 ### 8. Caddy

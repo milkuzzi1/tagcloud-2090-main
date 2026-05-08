@@ -176,10 +176,10 @@ LAN-IP сервера:
 | 80 | 80 | TCP | редирект `http → https` (Caddy) |
 | 443 | 443 | TCP | основной HTTPS-трафик |
 
-> Порт 25 (SMTP) для исходящей почты на residential-провайдере **почти
-> наверняка заблокирован** и проброс его не открывает (это блок «out»).
-> Раздел [Почта при динамическом IP](#почта-при-динамическом-ip)
-> описывает, как это обходить.
+> Порт 25 (SMTP) пробрасывать не надо — приложение отправляет почту
+> исходящим коннектом к `smtp.gmail.com:465`. Раздел
+> [Почта при динамическом IP](#почта-при-динамическом-ip) — про то,
+> почему Gmail SMTP в этом сценарии особенно удобен.
 
 Если IP за CGNAT (см. начало гайда) — проброс работать не будет.
 Используйте Вариант B.
@@ -279,7 +279,8 @@ sudo ufw default allow outgoing
 sudo ufw allow ssh                 # 22/tcp
 sudo ufw allow 80/tcp              # http → https redirect
 sudo ufw allow 443/tcp             # https
-# Postgres/Redis/Postfix:25 - только loopback, наружу не открываем!
+# Postgres/Redis - только loopback, наружу не открываем!
+# SMTP не открываем — приложение само ходит исходящим к smtp.gmail.com:465.
 sudo ufw enable
 sudo ufw status verbose
 ```
@@ -436,17 +437,54 @@ sudo ufw enable
 
 ## Почта при динамическом IP
 
-Дефолтная схема из `deploy/mail-server.md` (локальный Postfix → 25/tcp →
-получатель) на динамическом IP **почти не работает**:
+На динамическом IP «честный» self-host SMTP (свой Postfix → 25/tcp →
+получатель) **почти не работает**:
 
 - Большинство residential-сетей либо в SBL/PBL Spamhaus, либо хостер
   блокирует исходящий 25/tcp.
 - PTR-запись на динамический IP вы не сможете прописать.
 - Даже если письма уйдут — Gmail/Mail.ru будут резать как spam.
 
-Решение — оставляем локальный Postfix как принимающий gateway для
-приложения (app по-прежнему ходит на `127.0.0.1:25`), но релеим
-исходящие через сторонний submission-сервис. Подойдёт любой:
+Поэтому tagcloud по умолчанию ходит через **Gmail SMTP** —
+исходящим TLS-коннектом на `smtp.gmail.com:465`, авторизуясь App
+Password'ом. Никакого Postfix локально не нужно, входящий 25 порт
+тоже не нужен, динамический IP вообще не виден получателям —
+авторизованный отправитель в SPF/DKIM-цепочке это
+`smtp.gmail.com` (или ваш Workspace-домен), а не ваш домашний IP.
+
+Краткий путь (полная инструкция — `deploy/mail-server.md`):
+
+1. Включите 2-Step Verification на Google-аккаунте, который будет
+   отправителем.
+2. Создайте App Password: https://myaccount.google.com/apppasswords.
+3. В `/etc/tagcloud/tagcloud.env`:
+
+   ```ini
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_SECURE=true
+   SMTP_USER=your-account@gmail.com
+   SMTP_PASSWORD=<App Password>
+   SMTP_FROM="Tagcloud <your-account@gmail.com>"
+   ```
+
+4. `sudo systemctl restart tagcloud`.
+
+Если хочется отправлять как `noreply@2090.fun`, заведите Google
+Workspace на этот домен (~$6/user/мес) и пропишите DNS:
+
+| Тип | Имя | Значение |
+|---|---|---|
+| TXT | `@` (SPF) | `v=spf1 include:_spf.google.com -all` |
+| CNAME/TXT | `google._domainkey` (DKIM) | значение из Workspace Admin → Apps → Gmail → Authenticate email |
+| TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:postmaster@2090.fun; adkim=s; aspf=s` |
+
+После этого SMTP_USER/SMTP_FROM меняются на `noreply@2090.fun`, App
+Password создаётся для Workspace-аккаунта.
+
+Если объёмов Gmail (500/сутки на личный, 2000 на Workspace) перестанет
+хватать — переезжайте на специализированный ESP, конфиг в приложении
+поменяется только в SMTP_HOST/USER/PASSWORD:
 
 | Провайдер | Free/Trial | Хост | Порт | Auth |
 |---|---|---|---|---|
@@ -454,80 +492,21 @@ sudo ufw enable
 | [Brevo](https://www.brevo.com) (ex Sendinblue) | 300/день | `smtp-relay.brevo.com` | 587 | login/key |
 | [Mailgun](https://mailgun.com) | 5 000/мес 3 мес | `smtp.mailgun.org` | 587 | postmaster |
 | [SES](https://aws.amazon.com/ses/) | 200/день из EC2 | `email-smtp.<region>.amazonaws.com` | 587 | SMTP-credentials |
-| Yandex 360 / Google Workspace | платно, но «бизнесовые» лимиты | по доке провайдера | 465 | login/app-password |
-
-Дальше алгоритм одинаковый — настраиваем relayhost у локального
-Postfix.
-
-```bash
-sudo bash deploy/setup-mailserver.sh 2090.fun
-# Скрипт ставит postfix + opendkim. DKIM-ключ нам всё равно нужен:
-# смартхост подпись не уберёт, и доставка пройдёт лучше.
-
-sudo postconf -e "relayhost = [smtp.resend.com]:465"
-sudo postconf -e "smtp_sasl_auth_enable = yes"
-sudo postconf -e "smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd"
-sudo postconf -e "smtp_sasl_security_options = noanonymous"
-sudo postconf -e "smtp_tls_wrappermode = yes"           # 465 = implicit TLS
-sudo postconf -e "smtp_tls_security_level = encrypt"
-sudo postconf -e "smtp_sasl_mechanism_filter = plain, login"
-
-# Логин/пароль для смартхоста — chmod 600!
-sudo install -m 600 -o root -g root /dev/stdin /etc/postfix/sasl_passwd <<'EOF'
-[smtp.resend.com]:465 resend:re_СЕКРЕТНЫЙ_API_KEY
-EOF
-
-sudo postmap /etc/postfix/sasl_passwd
-sudo systemctl restart postfix
-```
-
-DNS-записи `2090.fun` (минимально для прохождения SPF/DKIM/DMARC при
-релее через Resend; для других провайдеров — посмотрите их доки):
-
-| Тип | Имя | Значение | Зачем |
-|---|---|---|---|
-| TXT | `@` | `v=spf1 include:_spf.resend.com -all` | Авторизуем Resend как отправителя. |
-| TXT | `mail._domainkey` | содержимое `/etc/opendkim/keys/2090.fun/mail.txt` | DKIM локального OpenDKIM (smarthost подпись не ломает). |
-| TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:postmaster@2090.fun; adkim=s; aspf=s` | Политика DMARC. |
-| TXT/CNAME | по доке Resend (`resend._domainkey`, `resend2._domainkey`) | значения из их dashboard | DKIM их собственной ESP-подписи. |
-
-Конфиг приложения **не меняется** — оно по-прежнему ходит на
-`127.0.0.1:25` без auth, локальный Postfix принимает, OpenDKIM
-подписывает и Postfix релеит к Resend.
-
-```bash
-# /etc/tagcloud/tagcloud.env
-SMTP_HOST=127.0.0.1
-SMTP_PORT=25
-SMTP_SECURE=false
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_FROM="Tagcloud <noreply@2090.fun>"
-```
 
 Проверка:
 
 ```bash
-echo "ping" | mail -s "tagcloud test from dynamic-ip host" you@example.com
-journalctl -u postfix -n 50 | grep -E "status=sent|status=bounced"
-# В логе должно быть status=sent через relay=smtp.resend.com[…]:465
+nc -vz smtp.gmail.com 465
+# Connection to smtp.gmail.com 465 port [tcp/smtps] succeeded!
+# Если порт 465 заблокирован хостером — попробуйте 587 (STARTTLS):
+#   SMTP_PORT=587
+#   SMTP_SECURE=false
+
+# Триггерим письмо (например, регистрацию через UI) и читаем лог:
+journalctl -u tagcloud -n 100 | grep -iE "smtp|mail|verification"
+# Не должно быть строк "535 5.7.8 Username and Password not accepted" —
+# это означает неверный App Password или 2FA не включена.
 ```
-
-Альтернатива — **полностью убрать Postfix** и слать прямо из
-приложения на смартхост:
-
-```ini
-SMTP_HOST=smtp.resend.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=resend
-SMTP_PASSWORD=re_СЕКРЕТНЫЙ_API_KEY
-SMTP_FROM="Tagcloud <noreply@2090.fun>"
-```
-
-Это проще (один компонент меньше), но теряете единый локальный лог
-исходящего и DKIM-подпись от собственного домена. На небольших
-объёмах оба варианта равнозначны — выбирайте по вкусу.
 
 ## Проверки после деплоя
 
@@ -554,7 +533,7 @@ curl -s https://2090.fun/readyz | jq   # {"ok":true,...}
 #  со статусом 101 Switching Protocols)
 
 # 5. Сервисы крутятся
-systemctl status tagcloud caddy postfix opendkim cf-ddns.timer cloudflared 2>&1 | grep -E "Active|●"
+systemctl status tagcloud caddy cf-ddns.timer cloudflared 2>&1 | grep -E "Active|●"
 ```
 
 ## Траблшутинг
