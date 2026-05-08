@@ -27,7 +27,9 @@ WorkingDirectory=/opt/tagcloud
 EnvironmentFile=/etc/tagcloud/tagcloud.env
 # Перебиваем PORT из tagcloud.env значением из имени unit'а (после @).
 Environment=PORT=%i
-ExecStart=/usr/bin/node /opt/tagcloud/build/index.js
+# deploy/server.js поверх build/index.js навешивает HTTP `upgrade` listener
+# для WebSocket (/ws/*). См. комментарий в tagcloud.service.
+ExecStart=/usr/bin/node /opt/tagcloud/deploy/server.js
 
 Restart=on-failure
 RestartSec=5

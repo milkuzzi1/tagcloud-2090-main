@@ -1,9 +1,22 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit';
+import type { IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { startExpiryCron } from '$lib/server/expiry/cron';
 import { COOKIE_NAME, getSessionUser } from '$lib/server/auth/sessions';
 import { flushPending, pendingCount } from '$lib/server/voting/submit';
+import { handleUpgrade } from '$lib/server/realtime/ws-server';
 import { log, withLogContext, genRequestId } from '$lib/server/log';
 import { observeHttpRequest } from '$lib/server/metrics';
+
+// Production-режим (adapter-node) сам по себе не вешает HTTP `upgrade`
+// listener — он обрабатывает только обычные запросы. Чтобы wss://…/ws/*
+// работал в проде, кладём `handleUpgrade` в globalThis: deploy/server.js
+// (кастомный Node-entry) подбирает функцию отсюда и регистрирует её на
+// httpServer.on('upgrade', …). В dev этот же путь идёт через
+// vite-plugin-ws.ts, и глобал просто остаётся неиспользуемым.
+type WsUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
+const wsGlobal = globalThis as unknown as { __tagcloudWsUpgrade?: WsUpgrade };
+wsGlobal.__tagcloudWsUpgrade = handleUpgrade;
 
 const STARTED_FLAG = '__tagcloud_server_started';
 const g = globalThis as unknown as Record<string, boolean>;

@@ -25,7 +25,10 @@ User=tagcloud
 Group=tagcloud
 WorkingDirectory=/opt/tagcloud
 EnvironmentFile=/etc/tagcloud/tagcloud.env
-ExecStart=/usr/bin/node /opt/tagcloud/build/index.js
+# deploy/server.js поверх build/index.js навешивает HTTP `upgrade` listener
+# для WebSocket (/ws/*). Сам build/index.js это не делает (adapter-node не
+# поддерживает WS из коробки), поэтому без обёртки в проде wss://…/ws/* падает.
+ExecStart=/usr/bin/node /opt/tagcloud/deploy/server.js
 
 # Restart-политика: при падении ждать 5 секунд и перезапускать. systemd сам
 # дросселирует через StartLimit*, чтобы не уйти в бесконечный crash-loop.

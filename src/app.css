@@ -60,6 +60,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Прозрачный wrapper для %sveltekit.body% (см. src/app.html). SvelteKit
+ * по умолчанию выставляет inline-стиль `style="display: contents"`, но
+ * inline-style-атрибуты ловятся CSP `style-src-attr`. Выносим стиль в
+ * класс — теперь хватает обычного `style-src 'self'`.
+ */
+.app-shell {
+  display: contents;
+}
+
 a {
   color: var(--c-navy);
   text-decoration: none;
