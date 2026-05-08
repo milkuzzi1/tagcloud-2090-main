@@ -2,13 +2,14 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { CredentialsSchema } from '$lib/server/auth/validation';
 import { register } from '$lib/server/auth/service';
+import { COOKIE_NAME, createSession } from '$lib/server/auth/sessions';
 import { VERIFICATION_TTL_HOURS } from '$lib/server/auth/verification';
 import { sendVerificationEmail } from '$lib/server/email/verification';
 import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
 import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request, url, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, url, getClientAddress, cookies }) => {
   const raw = await request.json().catch(() => null);
   const parsed = CredentialsSchema.safeParse(raw);
   if (!parsed.success) {
@@ -26,6 +27,25 @@ export const POST: RequestHandler = async ({ request, url, getClientAddress }) =
   const result = await register(parsed.data);
   if (!result.ok) {
     return json({ error: { code: result.code, message: result.message } }, { status: 409 });
+  }
+
+  // Временный режим без подтверждения email (AUTH_DISABLE_EMAIL_VERIFICATION=true).
+  // Сразу создаём сессию и логиним пользователя — SMTP не дёргаем вообще,
+  // потому что флаг включают именно тогда, когда отправка писем недоступна.
+  if (result.status === 'auto_verified') {
+    log.warn('register_auto_verified', { userId: result.user.id });
+    const { id: sessionId, expiresAt } = await createSession(result.user.id);
+    cookies.set(COOKIE_NAME, sessionId, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: true,
+      expires: expiresAt
+    });
+    return json(
+      { ok: true, status: result.status, user: result.user, autoVerified: true },
+      { status: 200 }
+    );
   }
 
   // Базовый URL для ссылки в письме: предпочитаем PUBLIC_BASE_URL (за reverse-proxy
