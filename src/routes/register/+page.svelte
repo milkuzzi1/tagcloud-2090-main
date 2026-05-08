@@ -24,6 +24,12 @@
           : (body.error?.message ?? 'Ошибка');
         return;
       }
+      // Режим без подтверждения email (AUTH_DISABLE_EMAIL_VERIFICATION=true):
+      // сервер уже поставил session-cookie — сразу едем в личный кабинет.
+      if (body.autoVerified) {
+        window.location.href = '/my';
+        return;
+      }
       pending = { email: body.email, ttlHours: body.ttlHours, status: body.status };
     } finally {
       submitting = false;
