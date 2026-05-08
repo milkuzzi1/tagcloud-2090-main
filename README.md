@@ -9,16 +9,24 @@ npm install
 # 2. Скопировать env
 cp .env.example .env
 
-# 3. (Опционально) поправить SMTP в .env
-# По умолчанию app ходит на 127.0.0.1:25 без авторизации — ожидается
-# локальный Postfix. Если его нет — отправка писем (verification, итоги
-# опросов) будет падать; всё остальное работает. Для разработки можно
-# поднять MailHog: `docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog`
-# и выставить SMTP_HOST=127.0.0.1 / SMTP_PORT=1025.
-SMTP_HOST=127.0.0.1
-SMTP_PORT=25
-SMTP_SECURE=false
-SMTP_FROM="Tagcloud <noreply@2090.fun>"
+# 3. Заполнить SMTP в .env
+# Все письма (verification, итоги опросов) уходят через Gmail SMTP. Чтобы
+# письма реально отправлялись:
+#   а) включить 2-Step Verification на Google-аккаунте;
+#   б) создать App Password: https://myaccount.google.com/apppasswords
+#      (обычный пароль не подойдёт — Google режет «less secure apps»);
+#   в) подставить адрес аккаунта в SMTP_USER и SMTP_FROM, App Password — в
+#      SMTP_PASSWORD.
+# Если App Password нет под рукой — в dev можно поднять MailHog:
+#   docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+# и выставить SMTP_HOST=127.0.0.1 / SMTP_PORT=1025 / SMTP_SECURE=false без
+# SMTP_USER/SMTP_PASSWORD.
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-account@gmail.com
+SMTP_PASSWORD=your-16-char-app-password
+SMTP_FROM="Tagcloud <your-account@gmail.com>"
 
 # 4. Запуск Postgres + Redis
 npm run db:up
