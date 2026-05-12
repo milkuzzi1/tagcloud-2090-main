@@ -18,6 +18,7 @@
 | `static-ip.md` | Пошаговая инструкция под конкретный self-host: статический IP `193.233.246.98` + домен `2090.dedyn.io` (deSEC). |
 | `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01). |
 | `dynamic-ip-setup.sh` | Интерактивный мастер по `dynamic-ip.md`: показывает каждую команду перед выполнением, спрашивает подтверждение (выполнить / пропустить / своя команда / выйти), ведёт прогресс. |
+| `base-deploy.sh` | Интерактивный мастер по разделу «Первый деплой» этого README (Node 22 + postgres + redis + сборка + tagcloud.env + миграции + systemd + Caddyfile под выбранный сценарий dynamic-ip). Запускать после `dynamic-ip-setup.sh`. |
 
 ## Первый деплой (типовой self-host)
 
