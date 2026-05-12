@@ -14,7 +14,7 @@
 | `tagcloud-backup.timer` | systemd timer — ежедневно в 03:30 UTC. |
 | `backup.env.example` | Конфиг бэкапа (DATABASE_URL + restic-репозиторий + пароль). |
 | `tagcloud@.service` | Шаблон systemd для multi-instance (горизонтальное масштабирование под 1000+ concurrent). |
-| `mail-server.md` | Гайд по настройке Gmail SMTP (App Password + DNS). |
+| `mail-server.md` | Гайд по настройке Sender.net SMTP (SMTP-credentials + DNS). |
 | `static-ip.md` | Пошаговая инструкция под конкретный self-host: статический IP `193.233.246.98` + домен `2090.dedyn.io` (deSEC). |
 | `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01). |
 | `dynamic-ip-setup.sh` | Интерактивный мастер по `dynamic-ip.md`: показывает каждую команду перед выполнением, спрашивает подтверждение (выполнить / пропустить / своя команда / выйти), ведёт прогресс. |
@@ -94,35 +94,33 @@ curl http://127.0.0.1:3000/healthz   # должно вернуть "ok"
 curl http://127.0.0.1:3000/readyz    # должно вернуть {"ok":true,...}
 ```
 
-### 7. Mail (Gmail SMTP)
+### 7. Mail (Sender.net SMTP)
 
-Все письма (verification, итоги опросов) уходят через Gmail SMTP.
+Все письма (verification, итоги опросов) уходят через Sender.net SMTP.
 Никаких локальных Postfix/OpenDKIM не требуется — приложение
-авторизуется в Gmail по App Password и отправляет напрямую.
+авторизуется в Sender.net по SMTP-credentials и отправляет напрямую.
 
 Краткий путь:
 
-1. Включить 2-Step Verification у Google-аккаунта, который будет
-   отправителем (для production удобнее завести отдельный
-   `noreply@…` через Google Workspace; для small-scale годится и
-   обычный `@gmail.com`).
-2. Создать App Password: https://myaccount.google.com/apppasswords
-   (обычный пароль не подойдёт — Google блокирует «less secure apps»).
-3. В `/etc/tagcloud/tagcloud.env` подставить:
+1. Зарегистрироваться на https://www.sender.net и активировать
+   Transactional emails.
+2. Добавить и верифицировать домен отправителя.
+3. Создать SMTP-пользователя: Transactional emails → Setup instructions
+   → SMTP → Add SMTP user.
+4. В `/etc/tagcloud/tagcloud.env` подставить:
 
    ```
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=465
-   SMTP_SECURE=true
-   SMTP_USER=your-account@gmail.com
-   SMTP_PASSWORD=<App Password>
-   SMTP_FROM="Tagcloud <your-account@gmail.com>"
+   SMTP_HOST=smtp.sender.net
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=<SMTP-логин из Sender.net>
+   SMTP_PASSWORD=<SMTP-пароль из Sender.net>
+   SMTP_FROM="Tagcloud <noreply@yourdomain.tld>"
    ```
 
-4. `systemctl restart tagcloud`.
+5. `systemctl restart tagcloud`.
 
-Подробности (SPF/DKIM/DMARC, Workspace, лимиты, send-as alias) —
-`deploy/mail-server.md`.
+Подробности (SPF/DKIM/DMARC, лимиты) — `deploy/mail-server.md`.
 
 Проверка:
 

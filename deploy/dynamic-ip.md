@@ -190,9 +190,9 @@ LAN-IP сервера:
 | 443 | 443 | TCP | основной HTTPS-трафик |
 
 > Порт 25 (SMTP) пробрасывать не надо — приложение отправляет почту
-> исходящим коннектом к `smtp.gmail.com:465`. Раздел
+> исходящим коннектом к `smtp.sender.net:587`. Раздел
 > [Почта при динамическом IP](#почта-при-динамическом-ip) — про то,
-> почему Gmail SMTP в этом сценарии особенно удобен.
+> почему внешний SMTP в этом сценарии особенно удобен.
 
 Если IP за CGNAT (см. начало гайда) — проброс работать не будет.
 Используйте Вариант B.
@@ -293,7 +293,7 @@ sudo ufw allow ssh                 # 22/tcp
 sudo ufw allow 80/tcp              # http → https redirect
 sudo ufw allow 443/tcp             # https
 # Postgres/Redis - только loopback, наружу не открываем!
-# SMTP не открываем — приложение само ходит исходящим к smtp.gmail.com:465.
+# SMTP не открываем — приложение само ходит исходящим к smtp.sender.net:587.
 sudo ufw enable
 sudo ufw status verbose
 ```
@@ -458,45 +458,43 @@ sudo ufw enable
 - PTR-запись на динамический IP вы не сможете прописать.
 - Даже если письма уйдут — Gmail/Mail.ru будут резать как spam.
 
-Поэтому tagcloud по умолчанию ходит через **Gmail SMTP** —
-исходящим TLS-коннектом на `smtp.gmail.com:465`, авторизуясь App
-Password'ом. Никакого Postfix локально не нужно, входящий 25 порт
+Поэтому tagcloud по умолчанию ходит через **Sender.net SMTP** —
+исходящим TLS-коннектом на `smtp.sender.net:587`, авторизуясь
+SMTP-credentials. Никакого Postfix локально не нужно, входящий 25 порт
 тоже не нужен, динамический IP вообще не виден получателям —
 авторизованный отправитель в SPF/DKIM-цепочке это
-`smtp.gmail.com` (или ваш Workspace-домен), а не ваш домашний IP.
+`smtp.sender.net`, а не ваш домашний IP.
 
 Краткий путь (полная инструкция — `deploy/mail-server.md`):
 
-1. Включите 2-Step Verification на Google-аккаунте, который будет
-   отправителем.
-2. Создайте App Password: https://myaccount.google.com/apppasswords.
-3. В `/etc/tagcloud/tagcloud.env`:
+1. Зарегистрируйтесь на https://www.sender.net и активируйте
+   Transactional emails.
+2. Добавьте и верифицируйте домен отправителя.
+3. Создайте SMTP-пользователя: Transactional emails → Setup instructions → SMTP → Add SMTP user.
+4. В `/etc/tagcloud/tagcloud.env`:
 
    ```ini
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=465
-   SMTP_SECURE=true
-   SMTP_USER=your-account@gmail.com
-   SMTP_PASSWORD=<App Password>
-   SMTP_FROM="Tagcloud <your-account@gmail.com>"
+   SMTP_HOST=smtp.sender.net
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=<SMTP-логин>
+   SMTP_PASSWORD=<SMTP-пароль>
+   SMTP_FROM="Tagcloud <noreply@2090.fun>"
    ```
 
-4. `sudo systemctl restart tagcloud`.
+5. `sudo systemctl restart tagcloud`.
 
-Если хочется отправлять как `noreply@2090.fun`, заведите Google
-Workspace на этот домен (~$6/user/мес) и пропишите DNS:
+Для отправки как `noreply@2090.fun` добавьте и верифицируйте домен
+`2090.fun` в дашборде Sender.net и пропишите DNS:
 
 | Тип | Имя | Значение |
 |---|---|---|
-| TXT | `@` (SPF) | `v=spf1 include:_spf.google.com -all` |
-| CNAME/TXT | `google._domainkey` (DKIM) | значение из Workspace Admin → Apps → Gmail → Authenticate email |
+| TXT | `@` (SPF) | `v=spf1 include:sender.net -all` |
+| CNAME | (по инструкции Sender.net) | DKIM-запись из дашборда Sender.net |
 | TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:postmaster@2090.fun; adkim=s; aspf=s` |
 
-После этого SMTP_USER/SMTP_FROM меняются на `noreply@2090.fun`, App
-Password создаётся для Workspace-аккаунта.
-
-Если объёмов Gmail (500/сутки на личный, 2000 на Workspace) перестанет
-хватать — переезжайте на специализированный ESP, конфиг в приложении
+Лимиты Sender.net зависят от тарифа. Если объёмов перестанет
+хватать — переезжайте на другой ESP, конфиг в приложении
 поменяется только в SMTP_HOST/USER/PASSWORD:
 
 | Провайдер | Free/Trial | Хост | Порт | Auth |
@@ -509,16 +507,15 @@ Password создаётся для Workspace-аккаунта.
 Проверка:
 
 ```bash
-nc -vz smtp.gmail.com 465
-# Connection to smtp.gmail.com 465 port [tcp/smtps] succeeded!
-# Если порт 465 заблокирован хостером — попробуйте 587 (STARTTLS):
-#   SMTP_PORT=587
-#   SMTP_SECURE=false
+nc -vz smtp.sender.net 587
+# Connection to smtp.sender.net 587 port [tcp/submission] succeeded!
+# Если порт 587 заблокирован хостером — попробуйте 2525:
+#   SMTP_PORT=2525
 
 # Триггерим письмо (например, регистрацию через UI) и читаем лог:
 journalctl -u tagcloud -n 100 | grep -iE "smtp|mail|verification"
-# Не должно быть строк "535 5.7.8 Username and Password not accepted" —
-# это означает неверный App Password или 2FA не включена.
+# Не должно быть строк "535" или "EAUTH" —
+# это означает неверные SMTP-credentials.
 ```
 
 ## Проверки после деплоя
@@ -590,9 +587,9 @@ systemctl status tagcloud caddy cf-ddns.timer cloudflared 2>&1 | grep -E "Active
   sudo cloudflared tunnel login
   ```
 
-**Письма уходят, но падают в спам Gmail**
+**Письма уходят, но падают в спам**
 
-- На gmail.com → у любого письма «Show original» проверьте
+- В почтовом клиенте → у любого письма «Show original» проверьте
   Authentication-Results: должны быть `spf=pass dkim=pass dmarc=pass`.
 - Если SPF/DMARC fail — проверьте, что значение TXT-записи в
   Cloudflare admin совпадает с тем, что показывает

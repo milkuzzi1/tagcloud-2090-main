@@ -8,37 +8,30 @@ let _transporter: Transporter | null = null;
  * SMTP_HOST не задан — вызывающий код сам решает, что делать (в проде
  * — кинуть понятную ошибку, в dev — молча пропустить отправку).
  *
- * Дефолтный сценарий — Gmail SMTP (implicit TLS на 465):
+ * Дефолтный сценарий — Sender.net SMTP (STARTTLS на 587):
  *
- *   SMTP_HOST=smtp.gmail.com
- *   SMTP_PORT=465
- *   SMTP_SECURE=true
- *   SMTP_USER=your-account@gmail.com
- *   SMTP_PASSWORD=<App Password из https://myaccount.google.com/apppasswords>
- *   SMTP_FROM="Tagcloud <your-account@gmail.com>"
- *
- * Альтернатива — STARTTLS на 587 (если 465 заблокирован файрволом):
- *
- *   SMTP_HOST=smtp.gmail.com
+ *   SMTP_HOST=smtp.sender.net
  *   SMTP_PORT=587
  *   SMTP_SECURE=false
+ *   SMTP_USER=<SMTP-пользователь из Sender.net>
+ *   SMTP_PASSWORD=<SMTP-пароль из Sender.net>
+ *   SMTP_FROM="Tagcloud <noreply@yourdomain.tld>"
  *
- * Для Gmail обязательны:
- *   - 2-Step Verification на аккаунте;
- *   - App Password (обычный пароль не подойдёт — Google блокирует
- *     «less secure apps»);
- *   - SMTP_FROM должен совпадать с SMTP_USER (или быть verified send-as
- *     alias в настройках Gmail), иначе Google молча перепишет From.
+ * Альтернативный порт — 2525 (если 587 заблокирован хостером).
+ *
+ * Для Sender.net:
+ *   - Создайте SMTP-пользователя: Transactional emails → Setup instructions → SMTP → Add SMTP user.
+ *   - SMTP_FROM должен быть verified sender/domain в Sender.net.
  *
  * Auth подключается только если заданы И SMTP_USER, И SMTP_PASSWORD —
- * для Gmail оба обязательны. Без auth (например, локальный MailHog
+ * для Sender.net оба обязательны. Без auth (например, локальный MailHog
  * в dev на 127.0.0.1:1025) транспорт уйдёт без креденшалов.
  */
 export function getTransporter(): Transporter | null {
   if (_transporter) return _transporter;
   if (!env.SMTP_HOST) return null;
 
-  const port = Number(env.SMTP_PORT ?? 465);
+  const port = Number(env.SMTP_PORT ?? 587);
   // Если SMTP_SECURE не задан — выводим из порта: 465 = implicit TLS,
   // всё остальное (25/587/1025) = plain или STARTTLS поверх plain.
   const secure = env.SMTP_SECURE != null ? env.SMTP_SECURE !== 'false' : port === 465;

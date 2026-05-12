@@ -56,9 +56,9 @@ SKIP_TUNNEL_SETUP="${SKIP_TUNNEL_SETUP:-0}"
 # SMTP (для итоговых писем). По умолчанию подставится placeholder —
 # отправка писем будет молча падать до тех пор, пока эти переменные не
 # заполнит администратор в /etc/tagcloud/tagcloud.env.
-SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
-SMTP_PORT="${SMTP_PORT:-465}"
-SMTP_SECURE="${SMTP_SECURE:-true}"
+SMTP_HOST="${SMTP_HOST:-smtp.sender.net}"
+SMTP_PORT="${SMTP_PORT:-587}"
+SMTP_SECURE="${SMTP_SECURE:-false}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASSWORD="${SMTP_PASSWORD:-}"
 SMTP_FROM="${SMTP_FROM:-}"
@@ -271,9 +271,9 @@ SESSION_SECRET=${SESSION_SECRET}
 SMTP_HOST=${SMTP_HOST}
 SMTP_PORT=${SMTP_PORT}
 SMTP_SECURE=${SMTP_SECURE}
-SMTP_USER=${SMTP_USER:-your-account@gmail.com}
-SMTP_PASSWORD=${SMTP_PASSWORD:-your-16-char-app-password}
-SMTP_FROM=${SMTP_FROM:-Tagcloud <your-account@gmail.com>}
+SMTP_USER=${SMTP_USER:-your-smtp-user}
+SMTP_PASSWORD=${SMTP_PASSWORD:-your-smtp-password}
+SMTP_FROM=${SMTP_FROM:-Tagcloud <noreply@yourdomain.tld>}
 EOF
 
 chmod 0640 "$ENV_FILE"

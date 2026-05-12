@@ -24,7 +24,7 @@ A/AAAA-записей в deSEC.
 - [6. systemd: `tagcloud.service`](#6-systemd-tagcloudservice)
 - [7. Caddy: reverse-proxy + TLS Let's Encrypt](#7-caddy-reverse-proxy--tls-lets-encrypt)
 - [8. Firewall (ufw)](#8-firewall-ufw)
-- [9. Почта (Gmail SMTP)](#9-почта-gmail-smtp)
+- [9. Почта (Sender.net SMTP)](#9-почта-sendernet-smtp)
 - [10. Бэкапы](#10-бэкапы)
 - [11. Финальные проверки](#11-финальные-проверки)
 - [12. Обновление приложения](#12-обновление-приложения)
@@ -179,12 +179,12 @@ XFF_DEPTH=1
 
 # SMTP — см. шаг 9. До настройки писем можно оставить заглушку,
 # приложение поднимется, но регистрации/итоги опросов будут падать.
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=your-account@gmail.com
-SMTP_PASSWORD=CHANGE_ME_APP_PASSWORD
-SMTP_FROM="Tagcloud <your-account@gmail.com>"
+SMTP_HOST=smtp.sender.net
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=CHANGE_ME_SMTP_USER
+SMTP_PASSWORD=CHANGE_ME_SMTP_PASSWORD
+SMTP_FROM="Tagcloud <noreply@yourdomain.tld>"
 
 # Опционально: токен на /metrics. Сгенерировать `openssl rand -hex 32`.
 METRICS_TOKEN=
@@ -260,40 +260,39 @@ ufw allow ssh           # 22/tcp — иначе можно потерять до
 ufw allow 80/tcp        # http → https redirect
 ufw allow 443/tcp       # основной трафик
 # Postgres/Redis — только loopback, наружу не открываем!
-# SMTP не открываем — приложение само ходит исходящим к smtp.gmail.com:465.
+# SMTP не открываем — приложение само ходит исходящим к smtp.sender.net:587.
 ufw enable
 ufw status verbose
 ```
 
-## 9. Почта (Gmail SMTP)
+## 9. Почта (Sender.net SMTP)
 
-Все письма (verification, итоги опросов) уходят через `smtp.gmail.com:465`
-по App Password. Никаких локальных Postfix/OpenDKIM поднимать не нужно.
+Все письма (verification, итоги опросов) уходят через `smtp.sender.net:587`
+по SMTP-credentials. Никаких локальных Postfix/OpenDKIM поднимать не нужно.
 
 Краткий путь:
 
-1. Включить 2-Step Verification на Google-аккаунте, который будет
-   отправителем (для production удобнее завести отдельный
-   `noreply@…` через Google Workspace).
-2. Создать App Password: <https://myaccount.google.com/apppasswords>
-   (обычный пароль не подойдёт — Google режет «less secure apps»).
-3. В `/etc/tagcloud/tagcloud.env` заменить значения `SMTP_USER`,
+1. Зарегистрироваться на https://www.sender.net и активировать
+   Transactional emails.
+2. Добавить и верифицировать домен отправителя.
+3. Создать SMTP-пользователя: Transactional emails → Setup instructions
+   → SMTP → Add SMTP user.
+4. В `/etc/tagcloud/tagcloud.env` заменить значения `SMTP_USER`,
    `SMTP_PASSWORD`, `SMTP_FROM` на реальные.
-4. `systemctl restart tagcloud`.
+5. `systemctl restart tagcloud`.
 
-Подробности (SPF/DKIM/DMARC, Workspace, лимиты, ESP-альтернативы) —
-`deploy/mail-server.md`.
+Подробности (SPF/DKIM/DMARC, лимиты) — `deploy/mail-server.md`.
 
 Проверка, что письма реально уходят:
 
 ```bash
-nc -vz smtp.gmail.com 465
+nc -vz smtp.sender.net 587
 # Connection ... succeeded! — порт открыт у хостера.
 
 # Триггерим письмо: регистрация нового пользователя через UI на
 # https://2090.dedyn.io. Дальше смотрим лог:
 journalctl -u tagcloud -n 100 | grep -iE 'smtp|mail|verification'
-# Не должно быть EAUTH/535 — это значит App Password неверный.
+# Не должно быть EAUTH/535 — это значит SMTP-credentials неверные.
 ```
 
 ## 10. Бэкапы
@@ -369,7 +368,7 @@ systemctl restart tagcloud
 | `curl https://2090.dedyn.io` → `Could not resolve host` | DNS ещё не обновился. `dig +short A 2090.dedyn.io @ns1.desec.io` должен вернуть `193.233.246.98`; публичные резолверы догоняют за 1–5 мин. |
 | Caddy: `obtain certificate failed: HTTP-01 challenge failed` | Снаружи закрыт `80/tcp` (firewall у хостера, ufw на сервере, либо A-запись ещё не в DNS). Проверить `nc -vz 193.233.246.98 80` с другой машины. |
 | `curl http://127.0.0.1:3000/readyz` → `{"ok":false,...}` | Нет коннекта к Postgres или Redis. Сверить `DATABASE_URL`/`REDIS_URL` в `/etc/tagcloud/tagcloud.env`, проверить `pg_isready -h 127.0.0.1` и `redis-cli ping`. |
-| `journalctl -u tagcloud` пишет `EAUTH` / `535 5.7.8` | Неверный SMTP App Password или 2FA не включена. См. `deploy/mail-server.md`. |
+| `journalctl -u tagcloud` пишет `EAUTH` / `535` | Неверные SMTP-credentials. См. `deploy/mail-server.md`. |
 | После `git pull` приложение не стартует | Скорее всего не применили миграцию. `npm run db:migrate` и `systemctl restart tagcloud`. |
 | Хочется завести `www.2090.dedyn.io` | Добавить ещё одну A-запись в deSEC и в Caddyfile прописать `2090.dedyn.io, www.2090.dedyn.io { … }`. Caddy выпустит общий сертификат на оба имени. |
 | Нужен IPv6 | В deSEC завести `AAAA`-запись с IPv6-адресом сервера, в `ufw allow 80,443/tcp` ничего менять не нужно (правила одинаковы для обоих стеков). |
