@@ -299,7 +299,7 @@ fi
 
 hdr "Применение миграций (drizzle)"
 
-sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && DATABASE_URL='${DATABASE_URL}' npm run db:push -- --force 2>/dev/null || DATABASE_URL='${DATABASE_URL}' npm run db:push"
+sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && DATABASE_URL='${DATABASE_URL}' npm run db:migrate"
 ok "Миграции применены"
 
 # ────────── landing на 2090.fun ──────────
