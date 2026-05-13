@@ -343,14 +343,6 @@
   <div class="cloud-head">
     <h2>Облако</h2>
     <div class="cloud-actions">
-      <!--
-        Правка №2: ссылка на чистый просмотр облака в новой вкладке.
-        /c/[code] — chromeless-страница без шапки/футера/навигации:
-        на экране только canvas с облаком. Доступна только креатору.
-      -->
-      <a class="btn btn-primary btn-sm" href={`/c/${survey.code}`} target="_blank" rel="noopener">
-        Открыть в новой вкладке
-      </a>
       <a class="btn btn-ghost btn-sm" href={csvUrl()}>Скачать CSV</a>
       <button
         class="btn btn-ghost btn-sm"
