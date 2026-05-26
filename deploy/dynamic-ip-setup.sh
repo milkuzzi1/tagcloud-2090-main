@@ -143,9 +143,12 @@ define_steps() {
         "Создать каталог /etc/tagcloud для конфигов и токена" \
         'sudo install -d -m 750 -o root -g root /etc/tagcloud'
 
+    # Намеренно <<'EOF' (квотированный heredoc): внешний "..." уже подставил
+    # ${domain} и ${cf_token} как литералы. Без кавычек bash -c "$cmd" на
+    # сервере раскроет их второй раз — токен с $/`/\ поломается.
     add_step common \
         "Положить Cloudflare API token в /etc/tagcloud/cloudflare.env (chmod 600)" \
-        "sudo install -m 600 -o root -g root /dev/stdin /etc/tagcloud/cloudflare.env <<EOF
+        "sudo install -m 600 -o root -g root /dev/stdin /etc/tagcloud/cloudflare.env <<'EOF'
 # Cloudflare API token (Edit zone DNS на ${domain})
 CF_API_TOKEN=${cf_token}
 # Дублируем под именем для caddy-dns/cloudflare:
@@ -205,17 +208,19 @@ for NAME in \$CF_RECORDS; do
 done
 EOF"
 
+    # Квотированный heredoc: domain/records уже подставлены внешним "...".
     add_step A \
         "Дописать зону и список записей в /etc/tagcloud/cloudflare.env" \
-        "sudo tee -a /etc/tagcloud/cloudflare.env >/dev/null <<EOF
+        "sudo tee -a /etc/tagcloud/cloudflare.env >/dev/null <<'EOF'
 CF_ZONE=${domain}
 # Записи, которые обновляем при смене IP. Через пробел.
 CF_RECORDS=\"${records}\"
 EOF"
 
+    # Квотированный heredoc: domain уже подставлен внешним "...".
     add_step A \
         "Создать systemd-юнит cf-ddns.service" \
-        "sudo tee /etc/systemd/system/cf-ddns.service >/dev/null <<EOF
+        "sudo tee /etc/systemd/system/cf-ddns.service >/dev/null <<'EOF'
 [Unit]
 Description=Cloudflare DDNS update for ${domain}
 After=network-online.target
@@ -337,9 +342,10 @@ sudo cloudflared tunnel route dns ${tunnel} ${www}"
 read -rp 'Путь к credentials JSON, который вернул tunnel create: ' CREDS
 sudo install -m 600 \"\$CREDS\" /etc/cloudflared/${tunnel}.json"
 
+    # Квотированный heredoc: tunnel/domain/www уже подставлены внешним "...".
     add_step B \
         "Записать /etc/cloudflared/config.yml" \
-        "sudo tee /etc/cloudflared/config.yml >/dev/null <<EOF
+        "sudo tee /etc/cloudflared/config.yml >/dev/null <<'EOF'
 tunnel: ${tunnel}
 credentials-file: /etc/cloudflared/${tunnel}.json
 
