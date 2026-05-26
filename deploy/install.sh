@@ -466,11 +466,38 @@ if [[ "$SKIP_TUNNEL_SETUP" == "1" ]]; then
 elif [[ -n "$CF_TUNNEL_TOKEN" ]]; then
   hdr "Установка cloudflared как сервиса (по token'у)"
 
+  # Старые артефакты от ручной настройки (cloudflared tunnel login + config.yml)
+  # ломают token-mode: cloudflared всё равно подхватывает /etc/cloudflared/config.yml
+  # и берёт из него `protocol:` и `credentials-file:`, в т.ч. от уже удалённого
+  # туннеля. Уносим их в .bak, чтобы token-mode работал из коробки.
+  mkdir -p /etc/cloudflared
+  for stale in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /etc/cloudflared/*.json; do
+    if [[ -f "$stale" ]]; then
+      mv -f "$stale" "${stale}.preinstall.bak"
+      info "Перенесён старый файл: $stale → ${stale}.preinstall.bak"
+    fi
+  done
+
   # `cloudflared service install <TOKEN>` ставит systemd-юнит cloudflared
   # и сохраняет креды в /etc/cloudflared/. Этот режим — для туннеля,
   # созданного в Cloudflare Zero Trust UI (Networks → Tunnels → Create).
   cloudflared service install "$CF_TUNNEL_TOKEN" || warn "cloudflared service install вернул ненулевой код — возможно, уже установлен"
 
+  # На многих провайдерных/NAT-сетях UDP 7844 (cloudflared QUIC) и/или
+  # IPv6 к cloudflare edge не работают — cloudflared с `--protocol auto`
+  # будет постоянно дёргаться: 4 conn-а не могут установить QUIC, валятся
+  # по timeout, retry с http2, потом edge снова закрывает.  Перезаписываем
+  # ExecStart с принудительным http2 + edge-ip-version=4, чтобы конекшены
+  # вставали с первой попытки и держались.  Если ваш сервер видит UDP 7844
+  # наружу и IPv6 — можете удалить override и положиться на `--protocol auto`.
+  mkdir -p /etc/systemd/system/cloudflared.service.d
+  cat > /etc/systemd/system/cloudflared.service.d/override.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/bin/cloudflared --no-autoupdate --protocol http2 --edge-ip-version 4 --retries 10 tunnel run --token ${CF_TUNNEL_TOKEN}
+EOF
+
+  systemctl daemon-reload
   systemctl enable --now cloudflared
   systemctl restart cloudflared
   ok "cloudflared запущен"
