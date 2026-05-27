@@ -8,7 +8,13 @@ declare global {
       errorId?: string;
     }
     interface Locals {
-      user: { id: string; email: string } | null;
+      user: {
+        id: string;
+        email: string;
+        role: 'admin' | 'user';
+        organizationId: string;
+        organizationName: string;
+      } | null;
     }
     // interface PageData {}
     // interface PageState {}

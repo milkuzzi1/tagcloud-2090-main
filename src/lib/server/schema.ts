@@ -9,21 +9,58 @@ import {
   bigserial,
   jsonb,
   index,
+  uniqueIndex,
   pgEnum
 } from 'drizzle-orm/pg-core';
 
 export const colorScheme = pgEnum('color_scheme', ['mono', 'random', 'custom', 'custom_gradient']);
 export const answerType = pgEnum('answer_type', ['single', 'multi']);
 export const surveyStatus = pgEnum('survey_status', ['active', 'expired', 'sent', 'failed']);
+export const userRole = pgEnum('user_role', ['admin', 'user']);
 
-export const users = pgTable('users', {
+export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
-  email: text('email').notNull().unique(),
-  passwordHash: text('password_hash'),
-  emailVerified: boolean('email_verified').notNull().default(false),
-  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+  name: text('name').notNull(),
+  nameNormalized: text('name_normalized').notNull().unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    passwordHash: text('password_hash'),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+    role: userRole('role').notNull().default('user'),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => ({
+    orgEmailUnique: uniqueIndex('users_org_email_unique').on(t.organizationId, t.email),
+    orgIdx: index('users_org_idx').on(t.organizationId)
+  })
+);
+
+export const organizationInvites = pgTable(
+  'organization_invites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => ({
+    orgEmailUnique: uniqueIndex('org_invites_org_email_unique').on(t.organizationId, t.email)
+  })
+);
 
 export const emailVerificationTokens = pgTable(
   'email_verification_tokens',
@@ -40,6 +77,23 @@ export const emailVerificationTokens = pgTable(
   (t) => ({
     userIdx: index('evt_user_idx').on(t.userId),
     expiresIdx: index('evt_expires_idx').on(t.expiresAt)
+  })
+);
+
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    token: text('token').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (t) => ({
+    userIdx: index('prt_user_idx').on(t.userId),
+    expiresIdx: index('prt_expires_idx').on(t.expiresAt)
   })
 );
 
@@ -116,6 +170,9 @@ export const responses = pgTable(
   })
 );
 
+export type Organization = typeof organizations.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type OrganizationInvite = typeof organizationInvites.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type Question = typeof questions.$inferSelect;
 export type Response = typeof responses.$inferSelect;

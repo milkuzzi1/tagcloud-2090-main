@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { CredentialsSchema } from '$lib/server/auth/validation';
+import { LoginSchema } from '$lib/server/auth/validation';
 import { login } from '$lib/server/auth/service';
 import { COOKIE_NAME } from '$lib/server/auth/sessions';
 import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
@@ -7,7 +7,7 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
   const raw = await request.json().catch(() => null);
-  const parsed = CredentialsSchema.safeParse(raw);
+  const parsed = LoginSchema.safeParse(raw);
   if (!parsed.success) {
     return json({ error: { code: 'invalid_input', issues: parsed.error.issues } }, { status: 400 });
   }
@@ -35,9 +35,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
     path: '/',
     httpOnly: true,
     sameSite: 'lax',
-    // Жёстко secure: приложение всегда живёт за TLS-прокси (Caddy в deploy/).
-    // На dev (http://localhost) современные браузеры допускают Secure-cookie
-    // на http для localhost — поэтому DX не страдает.
     secure: true,
     expires: result.expiresAt
   });

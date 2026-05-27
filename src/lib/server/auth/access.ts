@@ -1,9 +1,30 @@
 import { timingSafeEqual } from 'node:crypto';
+import { error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { surveys, type Survey } from '../schema';
 import { isValidCode } from '../surveys/codes';
 import { log } from '../log';
+import type { AuthUserExt } from './sessions';
+
+/**
+ * Гард для admin-эндпоинтов: бросает 401, если не залогинен, и 403,
+ * если роль не 'admin'. Возвращает гарантированно admin-пользователя.
+ *
+ * Использовать в +server.ts admin-роутов и /admin/+layout.server.ts:
+ *
+ *   const admin = requireAdmin(locals.user);
+ *   // admin.organizationId — гарантирован, admin.role === 'admin'
+ */
+export function requireAdmin(user: AuthUserExt | null): AuthUserExt {
+  if (!user) {
+    throw error(401, 'Требуется вход');
+  }
+  if (user.role !== 'admin') {
+    throw error(403, 'Доступ запрещён');
+  }
+  return user;
+}
 
 export type AccessFailure =
   | { ok: false; status: 400; code: 'invalid_code'; message: string }

@@ -1,22 +1,26 @@
 import { json } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { users } from '$lib/server/schema';
+import { organizations, users } from '$lib/server/schema';
 import { createVerificationToken, VERIFICATION_TTL_HOURS } from '$lib/server/auth/verification';
 import { sendVerificationEmail } from '$lib/server/email/verification';
 import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
+import { normalizeOrgName, OrganizationNameSchema } from '$lib/server/auth/validation';
 import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
-const Body = z.object({ email: z.string().email().max(254) });
+const Body = z.object({
+  organizationName: OrganizationNameSchema,
+  email: z.string().trim().toLowerCase().email().max(254)
+});
 
 /**
  * Переотправка verification-ссылки. Отвечает 202 в любом случае, чтобы
- * атакующий не мог по разнице ответов перебирать зарегистрированные email'ы.
+ * атакующий не мог по разнице ответов перебирать зарегистрированные (org, email).
  * Реальная отправка (и логирование ошибки SMTP) происходит только если
- * пользователь существует, имеет пароль (НЕ ghost) и ещё не подтверждён.
+ * пользователь существует, имеет пароль и ещё не подтверждён.
  */
 export const POST: RequestHandler = async ({ request, url, getClientAddress }) => {
   const raw = await request.json().catch(() => null);
@@ -33,7 +37,24 @@ export const POST: RequestHandler = async ({ request, url, getClientAddress }) =
     );
   }
 
-  const [u] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
+  const nameNormalized = normalizeOrgName(parsed.data.organizationName);
+  const [u] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      passwordHash: users.passwordHash,
+      emailVerified: users.emailVerified
+    })
+    .from(users)
+    .innerJoin(organizations, eq(users.organizationId, organizations.id))
+    .where(
+      and(
+        eq(organizations.nameNormalized, nameNormalized),
+        eq(users.email, parsed.data.email),
+        isNull(users.deletedAt)
+      )
+    )
+    .limit(1);
 
   if (u && u.passwordHash && !u.emailVerified) {
     const v = await createVerificationToken(u.id, u.email);

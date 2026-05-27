@@ -37,6 +37,15 @@
         <a class="nav-link" href="/my" aria-current={page.route.id === '/my' ? 'page' : undefined}>
           Мои опросы
         </a>
+        {#if data.user.role === 'admin'}
+          <a
+            class="nav-link"
+            href="/admin"
+            aria-current={page.route.id === '/admin' ? 'page' : undefined}
+          >
+            Админка
+          </a>
+        {/if}
         <button type="button" class="btn btn-ghost btn-sm" onclick={logout}>Выход</button>
       {:else}
         <a class="nav-link" href="/login">Войти</a>

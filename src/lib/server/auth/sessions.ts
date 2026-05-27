@@ -1,12 +1,25 @@
 import { randomBytes } from 'node:crypto';
-import { and, eq, gt, lt } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import { db } from '../db';
-import { sessions, users } from '../schema';
+import { organizations, sessions, users } from '../schema';
 
 export const COOKIE_NAME = 'tagcloud_session';
 export const SESSION_TTL_DAYS = 30;
 
 export type AuthUser = { id: string; email: string };
+
+/**
+ * Расширенный профиль из сессии. Грузится из БД на каждый запрос —
+ * включает роль и контекст организации (нужно для requireAdmin и для
+ * условного показа UI-элементов).
+ */
+export type AuthUserExt = {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+  organizationId: string;
+  organizationName: string;
+};
 
 function generateSessionId(): string {
   return randomBytes(32).toString('base64url');
@@ -21,16 +34,25 @@ export async function createSession(userId: string): Promise<{ id: string; expir
 
 export async function getSessionUser(
   sessionId: string | undefined | null
-): Promise<AuthUser | null> {
+): Promise<AuthUserExt | null> {
   if (!sessionId) return null;
   const rows = await db
-    .select({ id: users.id, email: users.email, expiresAt: sessions.expiresAt })
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      organizationId: users.organizationId,
+      organizationName: organizations.name
+    })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .where(and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date())))
+    .innerJoin(organizations, eq(users.organizationId, organizations.id))
+    .where(
+      and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date()), isNull(users.deletedAt))
+    )
     .limit(1);
   if (rows.length === 0) return null;
-  return { id: rows[0].id, email: rows[0].email };
+  return rows[0];
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

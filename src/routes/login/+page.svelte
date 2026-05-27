@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
 
+  let organizationName = $state('');
   let email = $state('');
   let password = $state('');
   let submitting = $state(false);
@@ -18,7 +19,7 @@
       const r = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ organizationName, email, password })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -42,7 +43,7 @@
       await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ organizationName, email })
       });
       resendDone = true;
     } finally {
@@ -61,6 +62,17 @@
       submit();
     }}
   >
+    <label>
+      <span>Название организации</span>
+      <input
+        class="input"
+        type="text"
+        bind:value={organizationName}
+        required
+        maxlength="100"
+        autocomplete="organization"
+      />
+    </label>
     <label>
       <span>Email</span>
       <input
@@ -110,12 +122,13 @@
       {submitting ? 'Входим…' : 'Войти'}
     </button>
   </form>
+  <p class="footer-link"><a href="/forgot-password">Забыли пароль?</a></p>
   <p class="footer-link">Нет аккаунта? <a href="/register">Регистрация</a></p>
 </div>
 
 <style>
   .auth {
-    max-width: 400px;
+    max-width: 440px;
     margin: 0 auto;
   }
   h1 {
@@ -162,7 +175,7 @@
   }
   .footer-link {
     color: var(--c-muted);
-    margin-top: var(--space-4);
+    margin-top: var(--space-3);
     text-align: center;
   }
 

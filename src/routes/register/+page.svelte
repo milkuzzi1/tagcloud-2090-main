@@ -1,5 +1,14 @@
 <script lang="ts">
-  let email = $state('');
+  import type { PageData } from './$types';
+
+  import { untrack } from 'svelte';
+
+  let { data }: { data: PageData } = $props();
+
+  type Mode = 'user' | 'admin';
+  let mode = $state<Mode>('user');
+  let organizationName = $state(untrack(() => data.initialOrg ?? ''));
+  let email = $state(untrack(() => data.initialEmail ?? ''));
   let password = $state('');
   let submitting = $state(false);
   let errorMessage = $state<string | null>(null);
@@ -14,7 +23,7 @@
       const r = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ role: mode, organizationName, email, password })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -24,8 +33,6 @@
           : (body.error?.message ?? 'Ошибка');
         return;
       }
-      // Режим без подтверждения email (AUTH_DISABLE_EMAIL_VERIFICATION=true):
-      // сервер уже поставил session-cookie — сразу едем в личный кабинет.
       if (body.autoVerified) {
         window.location.href = '/my';
         return;
@@ -43,7 +50,7 @@
       await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: pending.email })
+        body: JSON.stringify({ organizationName, email: pending.email })
       });
       resendDone = true;
     } finally {
@@ -64,11 +71,6 @@
     <p class="muted">
       Ссылка действует {pending.ttlHours} ч. Не пришло — проверьте «Спам» или нажмите ниже.
     </p>
-    {#if pending.status === 'claim_pending'}
-      <p class="muted">
-        После подтверждения в разделе «Мои опросы» появятся опросы, ранее созданные с этим адресом.
-      </p>
-    {/if}
     <button
       type="button"
       class="btn btn-primary btn-block"
@@ -86,13 +88,55 @@
     <p class="footer-link"><a href="/login">Назад ко входу</a></p>
   {:else}
     <h1>Регистрация</h1>
-    <p class="muted">После регистрации мы пришлём письмо со ссылкой для подтверждения email.</p>
+
+    <div class="mode-switch" role="tablist" aria-label="Режим регистрации">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'user'}
+        class:active={mode === 'user'}
+        onclick={() => (mode = 'user')}
+      >
+        Я пользователь
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'admin'}
+        class:active={mode === 'admin'}
+        onclick={() => (mode = 'admin')}
+      >
+        Я администратор
+      </button>
+    </div>
+
+    <p class="muted">
+      {#if mode === 'admin'}
+        Создаст новую организацию и сделает вас её администратором. После регистрации вы сможете
+        приглашать пользователей по email.
+      {:else}
+        Регистрация возможна, только если ваш email добавлен администратором организации в список
+        разрешённых.
+      {/if}
+    </p>
+
     <form
       onsubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
+      <label>
+        <span>Название организации</span>
+        <input
+          class="input"
+          type="text"
+          bind:value={organizationName}
+          required
+          maxlength="100"
+          autocomplete="organization"
+        />
+      </label>
       <label>
         <span>Email</span>
         <input
@@ -120,7 +164,7 @@
         <div class="alert alert-error" role="alert">{errorMessage}</div>
       {/if}
       <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-        {submitting ? 'Создаём…' : 'Создать аккаунт'}
+        {submitting ? 'Создаём…' : mode === 'admin' ? 'Создать организацию' : 'Создать аккаунт'}
       </button>
     </form>
     <p class="footer-link">Уже есть аккаунт? <a href="/login">Войти</a></p>
@@ -129,11 +173,34 @@
 
 <style>
   .auth {
-    max-width: 400px;
+    max-width: 440px;
     margin: 0 auto;
   }
   h1 {
     margin-bottom: var(--space-2);
+  }
+  .mode-switch {
+    display: flex;
+    gap: var(--space-1);
+    background: var(--c-surface);
+    padding: var(--space-1);
+    border-radius: var(--radius);
+    margin-top: var(--space-4);
+  }
+  .mode-switch button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font: inherit;
+    color: var(--c-muted);
+  }
+  .mode-switch button.active {
+    background: var(--c-bg);
+    color: var(--c-fg);
+    box-shadow: var(--shadow-sm);
   }
   form {
     display: flex;
@@ -143,7 +210,7 @@
     padding: var(--space-6);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    margin-top: var(--space-6);
+    margin-top: var(--space-4);
   }
   label {
     display: flex;
