@@ -55,7 +55,8 @@ export const organizationInvites = pgTable(
       .references(() => organizations.id, { onDelete: 'cascade' }),
     email: text('email').notNull(),
     invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
-    invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow()
+    invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow(),
+    note: text('note')
   },
   (t) => ({
     orgEmailUnique: uniqueIndex('org_invites_org_email_unique').on(t.organizationId, t.email)

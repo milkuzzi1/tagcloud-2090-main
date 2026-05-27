@@ -59,6 +59,7 @@ export const ResetPasswordSchema = z.object({
 export type ResetPassword = z.infer<typeof ResetPasswordSchema>;
 
 export const InviteEmailSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Некорректный email').max(254)
+  email: z.string().trim().toLowerCase().email('Некорректный email').max(254),
+  note: z.string().trim().max(200).optional()
 });
 export type InviteEmail = z.infer<typeof InviteEmailSchema>;

@@ -25,7 +25,8 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   const result = await addInvite({
     organizationId: admin.organizationId,
     email: parsed.data.email,
-    invitedBy: admin.id
+    invitedBy: admin.id,
+    note: parsed.data.note
   });
 
   if (!result.ok) {

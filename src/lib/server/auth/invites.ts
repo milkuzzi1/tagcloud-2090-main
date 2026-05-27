@@ -5,6 +5,7 @@ import { organizationInvites, sessions, users } from '../schema';
 export type InviteRow = {
   id: string;
   email: string;
+  note: string | null;
   invitedAt: Date;
   registered: boolean;
 };
@@ -30,8 +31,9 @@ export async function addInvite(params: {
   organizationId: string;
   email: string;
   invitedBy: string;
+  note?: string;
 }): Promise<AddInviteResult> {
-  const { organizationId, email, invitedBy } = params;
+  const { organizationId, email, invitedBy, note } = params;
 
   const [existingUser] = await db
     .select({ id: users.id })
@@ -53,7 +55,7 @@ export async function addInvite(params: {
   // приглашение того же email не порождает дублирующих строк.
   const inserted = await db
     .insert(organizationInvites)
-    .values({ organizationId, email, invitedBy })
+    .values({ organizationId, email, invitedBy, note: note ?? null })
     .onConflictDoNothing({
       target: [organizationInvites.organizationId, organizationInvites.email]
     })
@@ -98,6 +100,7 @@ export async function listInvites(organizationId: string): Promise<InviteRow[]> 
     .select({
       id: organizationInvites.id,
       email: organizationInvites.email,
+      note: organizationInvites.note,
       invitedAt: organizationInvites.invitedAt,
       registeredCount: sql<number>`COUNT(${users.id})::int`
     })
@@ -117,6 +120,7 @@ export async function listInvites(organizationId: string): Promise<InviteRow[]> 
   return rows.map((r) => ({
     id: r.id,
     email: r.email,
+    note: r.note,
     invitedAt: r.invitedAt,
     registered: r.registeredCount > 0
   }));

@@ -5,6 +5,7 @@
   let { data }: { data: PageData } = $props();
 
   let newEmail = $state('');
+  let newNote = $state('');
   let inviteBusy = $state(false);
   let inviteError = $state<string | null>(null);
   let inviteOk = $state<string | null>(null);
@@ -23,7 +24,7 @@
       const r = await fetch('/api/admin/invites', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: newEmail })
+        body: JSON.stringify({ email: newEmail, note: newNote || undefined })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -35,6 +36,7 @@
       }
       inviteOk = body.sent ? 'Приглашение отправлено' : 'Email уже в списке разрешённых';
       newEmail = '';
+      newNote = '';
       await invalidateAll();
     } finally {
       inviteBusy = false;
@@ -102,23 +104,32 @@
     </p>
 
     <form
-      class="row"
+      class="invite-form"
       onsubmit={(e) => {
         e.preventDefault();
         addInvite();
       }}
     >
+      <div class="row">
+        <input
+          class="input"
+          type="email"
+          placeholder="user@example.com"
+          bind:value={newEmail}
+          required
+          maxlength="254"
+        />
+        <button class="btn btn-primary" type="submit" disabled={inviteBusy}>
+          {inviteBusy ? 'Добавляем…' : 'Добавить'}
+        </button>
+      </div>
       <input
         class="input"
-        type="email"
-        placeholder="user@example.com"
-        bind:value={newEmail}
-        required
-        maxlength="254"
+        type="text"
+        placeholder="Заметка (необязательно)"
+        bind:value={newNote}
+        maxlength="200"
       />
-      <button class="btn btn-primary" type="submit" disabled={inviteBusy}>
-        {inviteBusy ? 'Добавляем…' : 'Добавить'}
-      </button>
     </form>
     {#if inviteError}
       <div class="alert alert-error">{inviteError}</div>
@@ -135,6 +146,9 @@
           <li>
             <div class="li-main">
               <span class="email">{inv.email}</span>
+              {#if inv.note}
+                <span class="note muted">{inv.note}</span>
+              {/if}
               {#if inv.registered}
                 <span class="badge badge-ok">зарегистрирован</span>
               {:else}
@@ -248,12 +262,13 @@
   .card h2 {
     margin: 0;
   }
-  .row {
+  .invite-form {
     display: flex;
-    gap: var(--space-3);
+    flex-direction: column;
+    gap: var(--space-2);
   }
-  .row .input {
-    flex: 1;
+  .note {
+    font-size: 0.85rem;
   }
   .list {
     list-style: none;

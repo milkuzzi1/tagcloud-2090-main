@@ -81,13 +81,6 @@ export async function registerAdmin(input: AdminRegister): Promise<RegisterResul
         })
         .returning({ id: users.id });
 
-      // Сами себя добавляем в allowlist, чтобы admin-аккаунт был
-      // консистентен с моделью «members = users в org».
-      await tx
-        .insert(organizationInvites)
-        .values({ organizationId: org.id, email: input.email, invitedBy: created.id })
-        .onConflictDoNothing();
-
       return { userId: created.id, orgId: org.id };
     });
     userId = result.userId;
