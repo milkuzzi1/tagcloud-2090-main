@@ -1,3 +1,4 @@
+import { env } from '$env/dynamic/private';
 import { LOGO_PNG_BASE64 } from './logo-data';
 
 let cached: Buffer | null = null;
@@ -10,4 +11,10 @@ export async function getLogoPng(): Promise<Buffer | null> {
   } catch {
     return null;
   }
+}
+
+export function getPublicLogoUrl(): string | null {
+  const base = env.PUBLIC_BASE_URL || env.ORIGIN;
+  if (!base) return null;
+  return `${base.replace(/\/+$/, '')}/logo2090.png`;
 }

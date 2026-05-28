@@ -1,5 +1,6 @@
 import type { CloudWord } from '$lib/types/cloud';
 import { escapeHtml } from './escape';
+import { getPublicLogoUrl } from './logo';
 
 export type AggregatedQuestion = {
   question: { text: string; answerType: 'single' | 'multi' };
@@ -20,6 +21,7 @@ const TEXT = '#1A1A1A';
 const BORDER = '#E5E7EB';
 
 export function resultsHtml(opts: ResultsTemplateInput): string {
+  const logoSrc = getPublicLogoUrl() ?? 'cid:logo';
   const items = opts.questions
     .map((q, i) => {
       const cid = `cloud_q${i + 1}`;
@@ -53,7 +55,7 @@ export function resultsHtml(opts: ResultsTemplateInput): string {
       <table style="width:100%;border-bottom:3px solid ${NAVY};padding-bottom:16px;border-collapse:collapse;">
         <tr>
           <td style="vertical-align:middle;width:56px;padding-right:14px;">
-            <img src="cid:logo" alt="Школа №2090" width="48" height="48" style="display:block;border-radius:6px;">
+            <img src="${logoSrc}" alt="Школа №2090" width="48" height="48" style="display:block;border-radius:6px;">
           </td>
           <td style="vertical-align:middle;">
             <div style="font-weight:600;color:${NAVY};font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">Облако тегов · Школа №2090</div>
