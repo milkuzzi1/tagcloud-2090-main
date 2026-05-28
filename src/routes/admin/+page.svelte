@@ -98,7 +98,7 @@
 
   <section class="card">
     <h2>Разрешённые email-адреса</h2>
-    <p class="muted">
+    <p class="muted lead">
       Пользователи могут регистрироваться, только если их email находится в этом списке. При
       добавлении мы отправляем приглашение со ссылкой на регистрацию.
     </p>
@@ -110,26 +110,26 @@
         addInvite();
       }}
     >
+      <input
+        class="input"
+        type="email"
+        placeholder="user@example.com"
+        bind:value={newEmail}
+        required
+        maxlength="254"
+      />
       <div class="row">
         <input
           class="input"
-          type="email"
-          placeholder="user@example.com"
-          bind:value={newEmail}
-          required
-          maxlength="254"
+          type="text"
+          placeholder="Заметка (необязательно)"
+          bind:value={newNote}
+          maxlength="200"
         />
         <button class="btn btn-primary" type="submit" disabled={inviteBusy}>
           {inviteBusy ? 'Добавляем…' : 'Добавить'}
         </button>
       </div>
-      <input
-        class="input"
-        type="text"
-        placeholder="Заметка (необязательно)"
-        bind:value={newNote}
-        maxlength="200"
-      />
     </form>
     {#if inviteError}
       <div class="alert alert-error">{inviteError}</div>
@@ -262,10 +262,21 @@
   .card h2 {
     margin: 0;
   }
+  .lead {
+    margin: 0;
+  }
   .invite-form {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+  .invite-form .row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .invite-form .row .input {
+    flex: 1;
   }
   .note {
     font-size: 0.85rem;
