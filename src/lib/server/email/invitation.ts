@@ -13,13 +13,11 @@ export type InvitationEmailInput = {
   to: string;
   inviteUrl: string;
   organizationName: string;
-  invitedByEmail?: string;
 };
 
 export function invitationHtml(input: InvitationEmailInput): string {
   const url = escapeHtml(input.inviteUrl);
   const org = escapeHtml(input.organizationName);
-  const by = input.invitedByEmail ? escapeHtml(input.invitedByEmail) : '';
   const logoSrc = getPublicLogoUrl() ?? 'cid:logo';
   return `<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -37,7 +35,7 @@ export function invitationHtml(input: InvitationEmailInput): string {
           </td>
         </tr>
       </table>
-      <p style="margin:24px 0 20px;line-height:1.5;">${by ? `Администратор ${by} добавил` : 'Администратор организации добавил'} ваш email в список разрешённых пользователей. Чтобы получить доступ, зарегистрируйтесь:</p>
+      <p style="margin:24px 0 20px;line-height:1.5;">Администратор организации добавил ваш email в список разрешённых пользователей. Чтобы получить доступ, зарегистрируйтесь:</p>
       <p style="text-align:center;margin:24px 0;">
         <a href="${url}" style="display:inline-block;background:${NAVY};color:#FFFFFF;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:500;font-size:15px;">Зарегистрироваться</a>
       </p>
@@ -55,9 +53,7 @@ export function invitationText(input: InvitationEmailInput): string {
   return [
     `Вас пригласили в «${input.organizationName}» — Облако тегов`,
     '',
-    input.invitedByEmail
-      ? `Администратор ${input.invitedByEmail} добавил ваш email в список разрешённых пользователей.`
-      : 'Администратор организации добавил ваш email в список разрешённых пользователей.',
+    'Администратор организации добавил ваш email в список разрешённых пользователей.',
     '',
     'Зарегистрируйтесь по ссылке:',
     input.inviteUrl,

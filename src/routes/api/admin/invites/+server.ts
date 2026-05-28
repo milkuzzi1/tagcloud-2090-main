@@ -40,8 +40,7 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
       await sendInvitationEmail({
         to: parsed.data.email,
         inviteUrl,
-        organizationName: admin.organizationName,
-        invitedByEmail: admin.email
+        organizationName: admin.organizationName
       });
     } catch (err) {
       log.error('invitation_send_failed', {
