@@ -101,7 +101,6 @@ export default [
       'workers/',
       'drizzle/',
       'static/',
-      'src/lib/server/email/logo-data.ts',
       'package-lock.json'
     ]
   }

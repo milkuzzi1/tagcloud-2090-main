@@ -21,7 +21,12 @@ const TEXT = '#1A1A1A';
 const BORDER = '#E5E7EB';
 
 export function resultsHtml(opts: ResultsTemplateInput): string {
-  const logoSrc = getPublicLogoUrl() ?? 'cid:logo';
+  const logoSrc = getPublicLogoUrl();
+  const logoImg = logoSrc
+    ? `<td style="vertical-align:middle;width:56px;padding-right:14px;">
+            <img src="${logoSrc}" alt="Школа №2090" width="48" height="48" style="display:block;border-radius:6px;">
+          </td>`
+    : '';
   const items = opts.questions
     .map((q, i) => {
       const cid = `cloud_q${i + 1}`;
@@ -54,9 +59,7 @@ export function resultsHtml(opts: ResultsTemplateInput): string {
     <tr><td>
       <table style="width:100%;border-bottom:3px solid ${NAVY};padding-bottom:16px;border-collapse:collapse;">
         <tr>
-          <td style="vertical-align:middle;width:56px;padding-right:14px;">
-            <img src="${logoSrc}" alt="Школа №2090" width="48" height="48" style="display:block;border-radius:6px;">
-          </td>
+          ${logoImg}
           <td style="vertical-align:middle;">
             <div style="font-weight:600;color:${NAVY};font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">Облако тегов · Школа №2090</div>
             <h1 style="font-size:22px;margin:4px 0 0;color:${NAVY};font-weight:600;line-height:1.3;">${escapeHtml(opts.surveyTitle)}</h1>

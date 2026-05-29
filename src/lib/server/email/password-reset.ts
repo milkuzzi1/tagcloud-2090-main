@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { getTransporter } from './smtp';
-import { getLogoPng, getPublicLogoUrl } from './logo';
+import { getPublicLogoUrl } from './logo';
 import { escapeHtml } from './escape';
 
 const NAVY = '#0E2A5C';
@@ -19,7 +19,12 @@ export type PasswordResetEmailInput = {
 export function passwordResetHtml(input: PasswordResetEmailInput): string {
   const url = escapeHtml(input.resetUrl);
   const org = escapeHtml(input.organizationName);
-  const logoSrc = getPublicLogoUrl() ?? 'cid:logo';
+  const logoSrc = getPublicLogoUrl();
+  const logoImg = logoSrc
+    ? `<td style="vertical-align:middle;width:56px;padding-right:14px;">
+            <img src="${logoSrc}" alt="Школа №2090" width="48" height="48" style="display:block;border-radius:6px;">
+          </td>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${TEXT};background:#FFFFFF;margin:0;padding:24px;-webkit-font-smoothing:antialiased;">
@@ -27,9 +32,7 @@ export function passwordResetHtml(input: PasswordResetEmailInput): string {
     <tr><td>
       <table style="width:100%;border-bottom:3px solid ${NAVY};padding-bottom:16px;border-collapse:collapse;">
         <tr>
-          <td style="vertical-align:middle;width:56px;padding-right:14px;">
-            <img src="${logoSrc}" alt="Школа №2090" width="48" height="48" style="display:block;border-radius:6px;">
-          </td>
+          ${logoImg}
           <td style="vertical-align:middle;">
             <div style="font-weight:600;color:${NAVY};font-size:12px;letter-spacing:0.06em;text-transform:uppercase;">Облако тегов · ${org}</div>
             <h1 style="font-size:20px;margin:4px 0 0;color:${NAVY};font-weight:600;">Сброс пароля</h1>
@@ -68,16 +71,12 @@ export async function sendPasswordResetEmail(input: PasswordResetEmailInput): Pr
 
   const fromAddr = env.SMTP_FROM ?? env.SMTP_USER;
   if (!fromAddr) throw new Error('SMTP_FROM не задан (и SMTP_USER пуст)');
-  const logo = await getLogoPng();
 
   await t.sendMail({
     from: fromAddr,
     to: input.to,
     subject: `Сброс пароля — ${input.organizationName}`,
     text: passwordResetText(input),
-    html: passwordResetHtml(input),
-    attachments: logo
-      ? [{ filename: 'logo.png', content: logo, contentType: 'image/png', cid: 'logo' }]
-      : []
+    html: passwordResetHtml(input)
   });
 }

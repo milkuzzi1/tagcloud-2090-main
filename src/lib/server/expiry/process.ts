@@ -5,7 +5,6 @@ import { aggregateQuestion } from '../cloud/aggregate';
 import { renderPng } from '../cloud/render-png';
 import { buildSurveyCsv } from '../export/csv';
 import { sendResultsEmail, type EmailAttachment } from '../email/send';
-import { getLogoPng } from '../email/logo';
 import { notifyClosed, notifyUserSurveyStatus } from '../realtime/broadcast';
 import { mapWithLimit } from '../util/concurrency';
 import { redis } from '../redis';
@@ -56,16 +55,6 @@ export async function processExpired(survey: Survey): Promise<void> {
     );
 
     const attachments: EmailAttachment[] = [];
-
-    const logo = await getLogoPng();
-    if (logo) {
-      attachments.push({
-        filename: 'logo.png',
-        content: logo,
-        contentType: 'image/png',
-        cid: 'logo'
-      });
-    }
 
     // Рендерим PNG параллельно с потолком: на опросах с 5+ непустыми
     // вопросами раньше шёл sequential `await renderPng` → суммарно

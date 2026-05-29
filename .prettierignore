@@ -6,5 +6,4 @@ package-lock.json
 workers
 static
 drizzle
-src/lib/server/email/logo-data.ts
 *.md
