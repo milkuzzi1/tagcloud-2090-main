@@ -61,7 +61,7 @@ SKIP_TUNNEL_SETUP="${SKIP_TUNNEL_SETUP:-0}"
 # SMTP (для итоговых писем). По умолчанию подставится placeholder —
 # отправка писем будет молча падать до тех пор, пока эти переменные не
 # заполнит администратор в /etc/tagcloud/tagcloud.env.
-SMTP_HOST="${SMTP_HOST:-smtp.sender.net}"
+SMTP_HOST="${SMTP_HOST:-smtp-pulse.com}"
 SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_SECURE="${SMTP_SECURE:-false}"
 SMTP_USER="${SMTP_USER:-}"

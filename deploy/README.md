@@ -14,7 +14,7 @@
 | `tagcloud-backup.timer` | systemd timer — ежедневно в 03:30 UTC. |
 | `backup.env.example` | Конфиг бэкапа (DATABASE_URL + restic-репозиторий + пароль). |
 | `tagcloud@.service` | Шаблон systemd для multi-instance (горизонтальное масштабирование под 1000+ concurrent). |
-| `mail-server.md` | Гайд по настройке Sender.net SMTP (SMTP-credentials + DNS). |
+| `mail-server.md` | Гайд по настройке SendPulse SMTP (SMTP-credentials + DNS). |
 | `static-ip.md` | Пошаговая инструкция под конкретный self-host: статический IP `193.233.246.98` + домен `2090.dedyn.io` (deSEC). |
 | `dynamic-ip.md` | Гайд по деплою на сервер с динамическим IP (DDNS / Cloudflare Tunnel / TLS DNS-01). |
 | `dynamic-ip-setup.sh` | Интерактивный мастер по `dynamic-ip.md`: показывает каждую команду перед выполнением, спрашивает подтверждение (выполнить / пропустить / своя команда / выйти), ведёт прогресс. |
@@ -94,27 +94,25 @@ curl http://127.0.0.1:3000/healthz   # должно вернуть "ok"
 curl http://127.0.0.1:3000/readyz    # должно вернуть {"ok":true,...}
 ```
 
-### 7. Mail (Sender.net SMTP)
+### 7. Mail (SendPulse SMTP)
 
-Все письма (verification, итоги опросов) уходят через Sender.net SMTP.
+Все письма (verification, итоги опросов) уходят через SendPulse SMTP.
 Никаких локальных Postfix/OpenDKIM не требуется — приложение
-авторизуется в Sender.net по SMTP-credentials и отправляет напрямую.
+авторизуется в SendPulse по SMTP-credentials и отправляет напрямую.
 
 Краткий путь:
 
-1. Зарегистрироваться на https://www.sender.net и активировать
-   Transactional emails.
-2. Добавить и верифицировать домен отправителя.
-3. Создать SMTP-пользователя: Transactional emails → Setup instructions
-   → SMTP → Add SMTP user.
+1. Зарегистрироваться на https://sendpulse.com и включить SMTP в кабинете.
+2. Добавить и верифицировать домен отправителя (SPF/DKIM).
+3. В **Settings → SMTP** взять логин (email от аккаунта) и SMTP-пароль.
 4. В `/etc/tagcloud/tagcloud.env` подставить:
 
    ```
-   SMTP_HOST=smtp.sender.net
+   SMTP_HOST=smtp-pulse.com
    SMTP_PORT=587
    SMTP_SECURE=false
-   SMTP_USER=<SMTP-логин из Sender.net>
-   SMTP_PASSWORD=<SMTP-пароль из Sender.net>
+   SMTP_USER=<email-логин SendPulse>
+   SMTP_PASSWORD=<SMTP-пароль SendPulse>
    SMTP_FROM="Tagcloud <noreply@yourdomain.tld>"
    ```
 

@@ -8,24 +8,26 @@ let _transporter: Transporter | null = null;
  * SMTP_HOST не задан — вызывающий код сам решает, что делать (в проде
  * — кинуть понятную ошибку, в dev — молча пропустить отправку).
  *
- * Дефолтный сценарий — Sender.net SMTP (STARTTLS на 587):
+ * Дефолтный сценарий — SendPulse SMTP (STARTTLS на 587):
  *
- *   SMTP_HOST=smtp.sender.net
+ *   SMTP_HOST=smtp-pulse.com
  *   SMTP_PORT=587
  *   SMTP_SECURE=false
- *   SMTP_USER=<SMTP-пользователь из Sender.net>
- *   SMTP_PASSWORD=<SMTP-пароль из Sender.net>
+ *   SMTP_USER=<email от аккаунта SendPulse>
+ *   SMTP_PASSWORD=<SMTP-пароль из SendPulse, см. Settings → SMTP>
  *   SMTP_FROM="Tagcloud <noreply@yourdomain.tld>"
  *
- * Альтернативный порт — 2525 (если 587 заблокирован хостером).
+ * Альтернативные порты SendPulse: 2525 (если 587 заблокирован хостером)
+ * и 465 (implicit TLS, тогда SMTP_SECURE=true).
  *
- * Для Sender.net:
- *   - Создайте SMTP-пользователя: Transactional emails → Setup instructions → SMTP → Add SMTP user.
- *   - SMTP_FROM должен быть verified sender/domain в Sender.net.
+ * Для SendPulse:
+ *   - Включите SMTP в личном кабинете и подтвердите домен отправителя
+ *     (SPF/DKIM записи).
+ *   - SMTP_FROM должен быть verified sender/domain.
  *
- * Auth подключается только если заданы И SMTP_USER, И SMTP_PASSWORD —
- * для Sender.net оба обязательны. Без auth (например, локальный MailHog
- * в dev на 127.0.0.1:1025) транспорт уйдёт без креденшалов.
+ * Auth подключается только если заданы И SMTP_USER, И SMTP_PASSWORD.
+ * Без auth (например, локальный MailHog в dev на 127.0.0.1:1025) транспорт
+ * уйдёт без креденшалов.
  */
 export function getTransporter(): Transporter | null {
   if (_transporter) return _transporter;

@@ -24,7 +24,7 @@ A/AAAA-записей в deSEC.
 - [6. systemd: `tagcloud.service`](#6-systemd-tagcloudservice)
 - [7. Caddy: reverse-proxy + TLS Let's Encrypt](#7-caddy-reverse-proxy--tls-lets-encrypt)
 - [8. Firewall (ufw)](#8-firewall-ufw)
-- [9. Почта (Sender.net SMTP)](#9-почта-sendernet-smtp)
+- [9. Почта (SendPulse SMTP)](#9-почта-sendpulse-smtp)
 - [10. Бэкапы](#10-бэкапы)
 - [11. Финальные проверки](#11-финальные-проверки)
 - [12. Обновление приложения](#12-обновление-приложения)
@@ -179,7 +179,7 @@ XFF_DEPTH=1
 
 # SMTP — см. шаг 9. До настройки писем можно оставить заглушку,
 # приложение поднимется, но регистрации/итоги опросов будут падать.
-SMTP_HOST=smtp.sender.net
+SMTP_HOST=smtp-pulse.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=CHANGE_ME_SMTP_USER
@@ -260,23 +260,21 @@ ufw allow ssh           # 22/tcp — иначе можно потерять до
 ufw allow 80/tcp        # http → https redirect
 ufw allow 443/tcp       # основной трафик
 # Postgres/Redis — только loopback, наружу не открываем!
-# SMTP не открываем — приложение само ходит исходящим к smtp.sender.net:587.
+# SMTP не открываем — приложение само ходит исходящим к smtp-pulse.com:587.
 ufw enable
 ufw status verbose
 ```
 
-## 9. Почта (Sender.net SMTP)
+## 9. Почта (SendPulse SMTP)
 
-Все письма (verification, итоги опросов) уходят через `smtp.sender.net:587`
+Все письма (verification, итоги опросов) уходят через `smtp-pulse.com:587`
 по SMTP-credentials. Никаких локальных Postfix/OpenDKIM поднимать не нужно.
 
 Краткий путь:
 
-1. Зарегистрироваться на https://www.sender.net и активировать
-   Transactional emails.
-2. Добавить и верифицировать домен отправителя.
-3. Создать SMTP-пользователя: Transactional emails → Setup instructions
-   → SMTP → Add SMTP user.
+1. Зарегистрироваться на https://sendpulse.com и включить SMTP в кабинете.
+2. Добавить и верифицировать домен отправителя (SPF/DKIM).
+3. В **Settings → SMTP** взять логин (email от аккаунта) и SMTP-пароль.
 4. В `/etc/tagcloud/tagcloud.env` заменить значения `SMTP_USER`,
    `SMTP_PASSWORD`, `SMTP_FROM` на реальные.
 5. `systemctl restart tagcloud`.
@@ -286,7 +284,7 @@ ufw status verbose
 Проверка, что письма реально уходят:
 
 ```bash
-nc -vz smtp.sender.net 587
+nc -vz smtp-pulse.com 587
 # Connection ... succeeded! — порт открыт у хостера.
 
 # Триггерим письмо: регистрация нового пользователя через UI на

@@ -267,7 +267,7 @@ PG_CONNECT_TIMEOUT_SEC=5
 
 REDIS_URL=redis://127.0.0.1:6379/0
 
-SMTP_HOST=smtp.sender.net
+SMTP_HOST=smtp-pulse.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=${smtp_user}
@@ -523,8 +523,8 @@ main() {
         warn "Подберите URL-safe (без @ : / # ? ´ и пробелов) или потом отредактируйте вручную."
     fi
 
-    smtp_user=$(ask_default "SMTP_USER (Sender.net SMTP логин)" "your-smtp-user")
-    smtp_pass=$(ask_secret "SMTP_PASSWORD (Sender.net SMTP пароль)")
+    smtp_user=$(ask_default "SMTP_USER (SendPulse SMTP логин)" "your-account@example.com")
+    smtp_pass=$(ask_secret "SMTP_PASSWORD (SendPulse SMTP пароль)")
     [[ -z "$smtp_pass" ]] && smtp_pass="CHANGE_ME_SMTP_APP_PASSWORD"
     smtp_from=$(ask_default "SMTP_FROM" "Tagcloud <${smtp_user}>")
 
