@@ -15,6 +15,7 @@ export type MemberRow = {
   email: string;
   role: 'admin' | 'user';
   emailVerified: boolean;
+  note: string | null;
   createdAt: Date;
 };
 
@@ -150,9 +151,17 @@ export async function listMembers(organizationId: string): Promise<MemberRow[]> 
       email: users.email,
       role: users.role,
       emailVerified: users.emailVerified,
+      note: organizationInvites.note,
       createdAt: users.createdAt
     })
     .from(users)
+    .leftJoin(
+      organizationInvites,
+      and(
+        eq(organizationInvites.organizationId, users.organizationId),
+        eq(organizationInvites.email, users.email)
+      )
+    )
     .where(and(eq(users.organizationId, organizationId), isNull(users.deletedAt)))
     .orderBy(users.createdAt);
 }

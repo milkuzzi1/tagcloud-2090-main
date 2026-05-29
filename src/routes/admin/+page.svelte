@@ -177,6 +177,9 @@
           <li>
             <div class="li-main">
               <span class="email">{m.email}</span>
+              {#if m.note}
+                <span class="note muted">{m.note}</span>
+              {/if}
               {#if m.role === 'admin'}
                 <span class="badge badge-admin">админ</span>
               {/if}
