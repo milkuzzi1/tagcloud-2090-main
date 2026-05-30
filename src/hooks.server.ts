@@ -7,6 +7,7 @@ import { flushPending, pendingCount } from '$lib/server/voting/submit';
 import { handleUpgrade } from '$lib/server/realtime/ws-server';
 import { log, withLogContext, genRequestId } from '$lib/server/log';
 import { observeHttpRequest } from '$lib/server/metrics';
+import { getClientIpFromKitEvent } from '$lib/server/net/client-ip';
 
 // Production-режим (adapter-node) сам по себе не вешает HTTP `upgrade`
 // listener — он обрабатывает только обычные запросы. Чтобы wss://…/ws/*
@@ -22,87 +23,92 @@ const STARTED_FLAG = '__tagcloud_server_started';
 const g = globalThis as unknown as Record<string, boolean>;
 
 if (!g[STARTED_FLAG]) {
-  g[STARTED_FLAG] = true;
-  startExpiryCron();
+ g[STARTED_FLAG] = true;
+ startExpiryCron();
 
-  // Graceful shutdown: дренируем in-memory очередь голосов перед завершением.
-  // Регистрируем оба сигнала: SIGTERM (контейнер/k8s) и SIGINT (Ctrl+C).
-  const shutdown = (signal: string) => {
-    log.info('shutdown signal received', { signal, pending: pendingCount() });
-    flushPending()
-      .catch((err) => log.error('shutdown flush failed', { err: String(err) }))
-      .finally(() => process.exit(0));
-  };
-  process.once('SIGTERM', () => shutdown('SIGTERM'));
-  process.once('SIGINT', () => shutdown('SIGINT'));
+ // Graceful shutdown: дренируем in-memory очередь голосов перед завершением.
+ // Регистрируем оба сигнала: SIGTERM (контейнер/k8s) и SIGINT (Ctrl+C).
+ const shutdown = (signal: string) => {
+   log.info('shutdown signal received', { signal, pending: pendingCount() });
+   flushPending()
+     .catch((err) => log.error('shutdown flush failed', { err: String(err) }))
+     .finally(() => process.exit(0));
+ };
+ process.once('SIGTERM', () => shutdown('SIGTERM'));
+ process.once('SIGINT', () => shutdown('SIGINT'));
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-  // Каждый запрос получает свой requestId. Если фронт прислал X-Request-Id —
-  // переиспользуем (помогает корреляции между upstream/downstream).
-  const incoming = event.request.headers.get('x-request-id');
-  const requestId = incoming && /^[a-zA-Z0-9_-]{1,128}$/.test(incoming) ? incoming : genRequestId();
+ // Каждый запрос получает свой requestId. Если фронт прислал X-Request-Id —
+ // переиспользуем (помогает корреляции между upstream/downstream).
+ const incoming = event.request.headers.get('x-request-id');
+ const requestId = incoming && /^[a-zA-Z0-9_-]{1,128}$/.test(incoming) ? incoming : genRequestId();
 
-  const start = performance.now();
-  const sid = event.cookies.get(COOKIE_NAME);
-  event.locals.user = await getSessionUser(sid);
+ const start = performance.now();
+ const sid = event.cookies.get(COOKIE_NAME);
+ event.locals.user = await getSessionUser(sid);
+ // Реальный IP клиента: XFF доверяем только когда socket-peer входит в
+ // TRUSTED_PROXY_CIDRS (дефолт — приватные диапазоны, см. client-ip.ts).
+ // Все downstream обработчики (rate-limit, аудит) читают отсюда вместо
+ // вызова event.getClientAddress() напрямую.
+ event.locals.clientIp = getClientIpFromKitEvent(event);
 
-  return withLogContext(
-    {
-      requestId,
-      userId: event.locals.user?.id,
-      method: event.request.method,
-      route: event.route.id ?? event.url.pathname
-    },
-    async () => {
-      const response = await resolve(event);
-      response.headers.set('x-request-id', requestId);
-      // Запрещаем кешировать любые ответы JSON-API: они персонализированы
-      // (cookie/session/IP), и попадание в shared-cache (proxy, CDN, edge)
-      // может вернуть чужие данные. Не трогаем GET .csv (там уже выставлен
-      // no-store вручную) и SSR-страницы — там SvelteKit сам управляет.
-      if (event.url.pathname.startsWith('/api/')) {
-        if (!response.headers.has('Cache-Control')) {
-          response.headers.set('Cache-Control', 'no-store');
-        }
-      }
-      const duration = performance.now() - start;
-      // Не зашумляем лог запросами health-проб — их Caddy дёргает раз в секунду.
-      if (event.url.pathname !== '/healthz' && event.url.pathname !== '/readyz') {
-        log.info('http_request', { status: response.status, durationMs: Math.round(duration) });
-      }
-      observeHttpRequest({
-        method: event.request.method,
-        route: event.route.id ?? 'unmatched',
-        status: response.status,
-        durationSec: duration / 1000
-      });
-      return response;
-    }
-  );
+ return withLogContext(
+   {
+     requestId,
+     userId: event.locals.user?.id,
+     method: event.request.method,
+     route: event.route.id ?? event.url.pathname
+   },
+   async () => {
+     const response = await resolve(event);
+     response.headers.set('x-request-id', requestId);
+     // Запрещаем кешировать любые ответы JSON-API: они персонализированы
+     // (cookie/session/IP), и попадание в shared-cache (proxy, CDN, edge)
+     // может вернуть чужие данные. Не трогаем GET .csv (там уже выставлен
+     // no-store вручную) и SSR-страницы — там SvelteKit сам управляет.
+     if (event.url.pathname.startsWith('/api/')) {
+       if (!response.headers.has('Cache-Control')) {
+         response.headers.set('Cache-Control', 'no-store');
+       }
+     }
+     const duration = performance.now() - start;
+     // Не зашумляем лог запросами health-проб — их Caddy дёргает раз в секунду.
+     if (event.url.pathname !== '/healthz' && event.url.pathname !== '/readyz') {
+       log.info('http_request', { status: response.status, durationMs: Math.round(duration) });
+     }
+     observeHttpRequest({
+       method: event.request.method,
+       route: event.route.id ?? 'unmatched',
+       status: response.status,
+       durationSec: duration / 1000
+     });
+     return response;
+   }
+ );
 };
 
 /**
- * Глобальный обработчик ошибок: SvelteKit зовёт его при любом необработанном
- * исключении в load/+server-руте. Мы:
- *  - логируем стек со структурой через наш JSON-логгер (контекст requestId
- *    уже взят из AsyncLocalStorage, см. handle выше);
- *  - выдаём клиенту безопасное сообщение + errorId, чтобы пользователь
- *    мог процитировать его в баг-репорте, а мы — найти запись в логах.
- */
+* Глобальный обработчик ошибок: SvelteKit зовёт его при любом необработанном
+* исключении в load/+server-руте. Мы:
+*  - логируем стек со структурой через наш JSON-логгер (контекст requestId
+*    уже взят из AsyncLocalStorage, см. handle выше);
+*  - выдаём клиенту безопасное сообщение + errorId, чтобы пользователь
+*    мог процитировать его в баг-репорте, а мы — найти запись в логах.
+*/
 export const handleError: HandleServerError = ({ error, event, status, message }) => {
-  const errorId = genRequestId();
-  log.error('unhandled_exception', {
-    errorId,
-    status,
-    message,
-    method: event.request.method,
-    route: event.route.id ?? event.url.pathname,
-    err: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : undefined
-  });
-  return {
-    message: 'Внутренняя ошибка сервера',
-    errorId
-  };
+ const errorId = genRequestId();
+ log.error('unhandled_exception', {
+   errorId,
+   status,
+   message,
+   method: event.request.method,
+   route: event.route.id ?? event.url.pathname,
+   err: error instanceof Error ? error.message : String(error),
+   stack: error instanceof Error ? error.stack : undefined
+ });
+ return {
+   message: 'Внутренняя ошибка сервера',
+   errorId
+ };
 };
