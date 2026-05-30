@@ -61,9 +61,9 @@ wssUser.on('connection', (ws: WebSocket, _req: IncomingMessage, ctx: { userId: s
 });
 
 /**
-* Парсит сессионный cookie из заголовков `Cookie` upgrade-запроса.
+* Парсит сессионное cookie из заголовков `Cookie` upgrade-запроса.
 * SvelteKit во время WS handshake не вызывает hooks/+server, поэтому
-* проксироваться приходится через `event.cookies` — читаем сами.
+* идём напрямую через `req.headers` — читаем сами.
 */
 function readSessionCookie(req: IncomingMessage): string | null {
  const header = req.headers.cookie;
@@ -125,19 +125,16 @@ export async function handleUpgrade(
    const rl = await checkWsRateLimit(ip);
    if (!rl.allowed) {
      log.warn('ws_user_rate_limited', { retryAfterSec: rl.retryAfterSec });
-     socket.write(`HTTP/1.1 429 Too Many Requests\r
-Retry-After: ${rl.retryAfterSec}\r
-\r
-`);
+     socket.write(
+       `HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${rl.retryAfterSec}\r\n\r\n`
+     );
      socket.destroy();
      return;
    }
    const sessionId = readSessionCookie(req);
    const user = await getSessionUser(sessionId);
    if (!user) {
-     socket.write('HTTP/1.1 401 Unauthorized\r
-\r
-');
+     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
      socket.destroy();
      return;
    }
@@ -169,17 +166,16 @@ Retry-After: ${rl.retryAfterSec}\r
    return;
  }
 
- // Rate-limit ДО запроса к Postgres: дешёвый INCR в Redis, защищает БД
- // от шторма handshake'ов. На публичном endpoint'e лимит особенноважен —
+ // Rate-limit ДО запроса в Postgres: дешёвый INCR в Redis, защищает БД
+ // от шторма handshake'ов. На публичном endpoint'e лимит особенно важен —
  // там нет токена, любой может пытаться открыть много соединений.
  const ip = getClientIp(req);
  const rl = await checkWsRateLimit(ip);
  if (!rl.allowed) {
    log.warn('ws_rate_limited', { surveyCode: code, retryAfterSec: rl.retryAfterSec });
-   socket.write(`HTTP/1.1 429 Too Many Requests\r
-Retry-After: ${rl.retryAfterSec}\r
-\r
-`);
+   socket.write(
+     `HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${rl.retryAfterSec}\r\n\r\n`
+   );
    socket.destroy();
    return;
  }
@@ -196,9 +192,9 @@ Retry-After: ${rl.retryAfterSec}\r
  }
 
  // Терминальные опросы (sent/failed) — короткий апгрейд только для
- // того, чтобЫ клиент получил 'closed' и обновил UI. На состояни
+ // того, чтобы клиент получил 'closed' и обновил UI. На состоянии
  // 'expired' (transient) WS остаётся открытым: дальше processExpired
- // сам сделает notifyClosed с финальной причиной 'sent'/'failed'.
+ // сам создаёт ?: 作是當前的片本的
  if (survey.status === 'sent' || survey.status === 'failed') {
    wss.handleUpgrade(req, socket, head, (ws) => {
      try {
