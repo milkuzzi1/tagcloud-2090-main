@@ -13,36 +13,36 @@ import type { RequestHandler } from './$types';
 * сессии пользователя инвалидируются (см. consumePasswordReset), создаётся
 * новая, и кука выставляется тут же — пользователь сразу залогинен.
 */
-export const POST: RequestHandler = async ({ request, cookies, getClientAddress }) => {
- const raw = await request.json().catch(() => null);
- const parsed = ResetPasswordSchema.safeParse(raw);
- if (!parsed.success) {
-   return json({ error: { code: 'invalid_input', issues: parsed.error.issues } }, { status: 400 });
- }
+export const POST: RequestHandler = async ({ request, cookies, locals }) => {
+const raw = await request.json().catch(() => null);
+const parsed = ResetPasswordSchema.safeParse(raw);
+if (!parsed.success) {
+  return json({ error: { code: 'invalid_input', issues: parsed.error.issues } }, { status: 400 });
+}
 
- // По IP лимитируем без email-бакета — email мы не знаем, пока токен не
- // консьюмили. IP-бакета достаточно для защиты от bruteforce токенов.
- const rl = await checkAuthRateLimit(getClientAddress(), 'reset-password');
- if (!rl.allowed) {
-   return json(
-     { error: { code: 'rate_limited', message: 'Слишком много попыток, попробуйте позже' } },
-     { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
-   );
- }
+// По IP лимитируем без email-бакета — email мы не знаем, пока токен не
+// консьюмили. IP-бакета достаточно для защиты от bruteforce токенов.
+const rl = await checkAuthRateLimit(locals.clientIp, 'reset-password');
+if (!rl.allowed) {
+  return json(
+    { error: { code: 'rate_limited', message: 'Слишком много попыток, попробуйте позже' } },
+    { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+  );
+}
 
- const result = await consumePasswordReset(parsed.data);
- if (!result.ok) {
-   const status = result.code === 'invalid' ? 404 : 400;
-   return json({ error: { code: result.code, message: result.message } }, { status });
- }
+const result = await consumePasswordReset(parsed.data);
+if (!result.ok) {
+  const status = result.code === 'invalid' ? 404 : 400;
+  return json({ error: { code: result.code, message: result.message } }, { status });
+}
 
- cookies.set(COOKIE_NAME, result.sessionId, {
-   path: '/',
-   httpOnly: true,
-   sameSite: 'lax',
-   secure: !dev,
-   expires: result.expiresAt
- });
+cookies.set(COOKIE_NAME, result.sessionId, {
+  path: '/',
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: !dev,
+  expires: result.expiresAt
+});
 
- return json({ ok: true, user: result.user }, { status: 200 });
+return json({ ok: true, user: result.user }, { status: 200 });
 };
