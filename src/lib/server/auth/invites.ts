@@ -23,10 +23,6 @@ export type MemberRow = {
 
 export type RemoveMemberResult = 'ok' | 'self_removal' | 'last_admin' | 'not_found';
 
-/**
- * \u0414\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u0442 email \u0432 \u0430\u043b\u043b\u043e\u0443\u043b\u0438\u0441\u0442.
- * \u0415\u0441\u043b\u0438 email \u0443\u0436\u0435 \u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d \u0441\u0440\u0435\u0434\u0438 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 'already_member'.
- */
 export async function addInvite(params: {
   email: string;
   invitedBy: string;
@@ -66,7 +62,7 @@ export async function removeInvite(params: {
 export async function listInvites(): Promise<InviteRow[]> {
   const rows = await db
     .select({
-      id: organizationInvites.id,
+      inviteId: organizationInvites.id,
       email: organizationInvites.email,
       note: organizationInvites.note,
       invitedAt: organizationInvites.invitedAt,
@@ -75,7 +71,7 @@ export async function listInvites(): Promise<InviteRow[]> {
     .from(organizationInvites)
     .leftJoin(users, and(eq(users.email, organizationInvites.email), isNull(users.deletedAt)));
   return rows.map((r) => ({
-    id: r.id,
+    id: r.inviteId,
     email: r.email,
     note: r.note,
     invitedAt: r.invitedAt,
