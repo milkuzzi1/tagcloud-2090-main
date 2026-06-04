@@ -1,12 +1,12 @@
 import { json } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { env } from '$env/dynamic/private';
 import { RegisterSchema } from '$lib/server/auth/validation';
 import { register } from '$lib/server/auth/service';
 import { COOKIE_NAME, createSession } from '$lib/server/auth/sessions';
 import { VERIFICATION_TTL_HOURS } from '$lib/server/auth/verification';
 import { sendVerificationEmail } from '$lib/server/email/verification';
 import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
+import { resolvePublicBaseUrl } from '$lib/server/net/base-url';
 import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
@@ -14,7 +14,7 @@ import type { RequestHandler } from './$types';
 // Admin accounts are created exclusively by existing admins
 // via POST /api/admin/create-admin.
 
-export const POST: RequestHandler = async ({ request, url, locals, sookies }) => {
+export const POST: RequestHandler = async ({ request, url, locals, cookies }) => {
   const raw = await request.json().catch(() => null);
 
   // Block any attempt to register as admin via public endpoint
@@ -60,7 +60,7 @@ export const POST: RequestHandler = async ({ request, url, locals, sookies }) =>
     );
   }
 
-  const baseUrl = env.PUBLIC_BASE_URL || env.ORIGIN || url.origin;
+  const baseUrl = resolvePublicBaseUrl(url.origin);
   const verifyUrl = `${baseUrl}/verify?t=${result.verification.token}`;
 
   try {

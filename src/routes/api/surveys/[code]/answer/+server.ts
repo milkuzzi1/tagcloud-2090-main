@@ -4,6 +4,7 @@ import { SubmitAnswersSchema } from '$lib/server/voting/validation';
 import { validateSubmission } from '$lib/server/voting/validate';
 import { submitAnswers } from '$lib/server/voting/submit';
 import { checkRateLimit, releaseVote, tryClaimVote } from '$lib/server/voting/rate-limit';
+import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
 function statusForError(code: string): number {
@@ -59,7 +60,16 @@ if (!v.ok) {
 // занимаем слот. Раньше `hasVoted` + `markVoted` шли двумя командами — два
 // параллельных запроса с одного IP проходили проверку и оба отправлялись в
 // submitAnswers. Если SET NX вернул false — слот уже занят (повторный голос).
-const claimed = await tryClaimVote(ip, code, v.survey.expiresAt);
+let claimed = true;
+try {
+  claimed = await tryClaimVote(ip, code, v.survey.expiresAt);
+} catch (err) {
+  // Redis недоступен: вместо 500 на всём эндпоинте — деградируем мягко.
+  // Голос важнее идемпотентности на короткое окно недоступности Redis,
+  // поэтому принимаем ответ без дедупликации (возможен дубль за время
+  // даунтайма Redis). Дедуп восстановится, когда Redis вернётся.
+  log.error('vote_claim_redis_unavailable', { code, err: String(err) });
+}
 if (!claimed) {
   return json(
     { error: { code: 'already_voted', message: 'Вы уже отправили ответы на этот опрос' } },

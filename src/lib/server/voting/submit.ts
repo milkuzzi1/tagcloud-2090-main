@@ -1,3 +1,4 @@
+import { env } from '$env/dynamic/private';
 import { db } from '../db';
 import { responses } from '../schema';
 import { redis } from '../redis';
@@ -19,6 +20,17 @@ const FLUSH_THRESHOLD = 100;
 // FLUSH_THRESHOLD; превышение → сервис отдаёт 503 в `/answer`, чтобы
 // клиент попробовал позже, пока не дренируется очередь.
 const MAX_BUFFER_SIZE = 100_000;
+
+// --- Durability mode --------------------------------------------------------
+//
+// By default votes are buffered in memory and flushed periodically, keeping
+// the hot /answer path fast. A HARD crash (OOM / kill -9 — not SIGTERM/SIGINT,
+// which we drain via flushPending) can lose up to one buffer of already-acked
+// votes. For the school-survey use case this is an acceptable, conscious
+// trade-off. Deployments where votes are authoritative can set
+// VOTE_DURABLE_WRITES=true to flush synchronously, so a 201 is only returned
+// after the rows are persisted (costs ~1 DB round-trip of latency).
+const DURABLE_WRITES = env.VOTE_DURABLE_WRITES === 'true';
 // Чанк для bulk-INSERT'а: postgres-js по умолчанию имеет лимит ~65k параметров,
 // при batch > ~5k items × 3 поля параметрический предел нарушался → пакет
 // возвращался ошибкой и шёл по retry-петле. 1000 даёт 3000 параметров —
@@ -141,6 +153,17 @@ export async function submitAnswers(processed: ProcessedAnswer[]): Promise<Submi
   if (added > 0) {
     incVotesAccepted(added);
     setVotesPending(buffer.length);
+  }
+  if (DURABLE_WRITES) {
+    // Synchronous persistence: only acknowledge once rows are flushed. On
+    // failure the batch stays buffered and we report overloaded so the client
+    // retries, rather than acknowledging a vote that was never persisted.
+    await flush();
+    if (buffer.length > 0) {
+      scheduleFlush();
+      return { ok: false, code: 'overloaded' };
+    }
+    return { ok: true, accepted: added };
   }
   if (buffer.length >= FLUSH_THRESHOLD) {
     await flush();

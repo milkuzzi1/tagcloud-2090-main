@@ -62,6 +62,38 @@ async function ipHash(ip: string): Promise<string> {
   return createHash('sha256').update(`${ip}:${salt}`).digest('hex');
 }
 
+// --- Survey-stable IP hash for vote dedup ----------------------------------
+//
+// `ipHash` above mixes in a DAILY-rotating salt (good for privacy on the
+// short-lived rate-limit / auth buckets). The `voted:` dedup key must instead
+// stay stable for the WHOLE lifetime of a survey: a survey spanning UTC
+// midnight would otherwise re-hash the same client to a new value the next day
+// and let them vote again. Vote dedup therefore uses a PER-SURVEY salt created
+// once and kept (with a generous cap) for the survey's lifetime.
+const SURVEY_SALT_TTL_SEC = 90 * 24 * 60 * 60;
+
+const surveySaltCache = new Map<string, string>();
+
+async function getOrCreateSurveySalt(code: string): Promise<string> {
+  const cached = surveySaltCache.get(code);
+  if (cached) return cached;
+  const key = `votesalt:${code}`;
+  const existing = await redis.get(key);
+  const value = existing ?? randomBytes(32).toString('hex');
+  if (!existing) {
+    await redis.setex(key, SURVEY_SALT_TTL_SEC, value);
+  } else {
+    await redis.expire(key, SURVEY_SALT_TTL_SEC);
+  }
+  surveySaltCache.set(code, value);
+  return value;
+}
+
+async function voteIpHash(ip: string, code: string): Promise<string> {
+  const salt = await getOrCreateSurveySalt(code);
+  return createHash('sha256').update(`${ip}:${salt}`).digest('hex');
+}
+
 // Lua-скрипт: атомарный INCR + EXPIRE при первом увеличении.
 // Возвращает [count, ttl].
 //
@@ -101,12 +133,12 @@ export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
 }
 
 export async function hasVoted(ip: string, code: string): Promise<boolean> {
-  const hash = await ipHash(ip);
+  const hash = await voteIpHash(ip, code);
   return (await redis.exists(`voted:${hash}:${code}`)) === 1;
 }
 
 export async function markVoted(ip: string, code: string, expiresAt: Date): Promise<void> {
-  const hash = await ipHash(ip);
+  const hash = await voteIpHash(ip, code);
   const ttlSec = Math.max(MIN_VOTED_TTL_SEC, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
   await redis.setex(`voted:${hash}:${code}`, ttlSec, '1');
 }
@@ -124,7 +156,7 @@ export async function markVoted(ip: string, code: string, expiresAt: Date): Prom
  * через `releaseVote`, чтобы клиент мог попробовать заново.
  */
 export async function tryClaimVote(ip: string, code: string, expiresAt: Date): Promise<boolean> {
-  const hash = await ipHash(ip);
+  const hash = await voteIpHash(ip, code);
   const ttlSec = Math.max(MIN_VOTED_TTL_SEC, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
   const r = await redis.set(`voted:${hash}:${code}`, '1', 'EX', ttlSec, 'NX');
   return r === 'OK';
@@ -136,7 +168,7 @@ export async function tryClaimVote(ip: string, code: string, expiresAt: Date): P
  * запись на TTL, и пользователь видел бы 409 «Уже голосовали» при повторе.
  */
 export async function releaseVote(ip: string, code: string): Promise<void> {
-  const hash = await ipHash(ip);
+  const hash = await voteIpHash(ip, code);
   await redis.del(`voted:${hash}:${code}`);
 }
 

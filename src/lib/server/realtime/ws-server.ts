@@ -194,7 +194,7 @@ export async function handleUpgrade(
  // Терминальные опросы (sent/failed) — короткий апгрейд только для
  // того, чтобы клиент получил 'closed' и обновил UI. На состоянии
  // 'expired' (transient) WS остаётся открытым: дальше processExpired
- // сам создаёт ?: 作是當前的片本的
+ // сам переведёт опрос в финальный статус и закроет соединение.
  if (survey.status === 'sent' || survey.status === 'failed') {
    wss.handleUpgrade(req, socket, head, (ws) => {
      try {

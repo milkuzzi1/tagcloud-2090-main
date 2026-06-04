@@ -4,7 +4,7 @@ import { getSurveyPublic } from '$lib/server/surveys/get';
 import { hasVoted } from '$lib/server/voting/rate-limit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, getClientAddress }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
   const code = params.code;
   if (!isValidCode(code)) error(404, 'Опрос не найден');
 
@@ -20,7 +20,11 @@ export const load: PageServerLoad = async ({ params, getClientAddress }) => {
   let alreadyVoted = false;
   if (!expired) {
     try {
-      alreadyVoted = await hasVoted(getClientAddress(), code);
+      // Use the same XFF-resolved client IP as the POST /answer vote path
+      // (locals.clientIp) so the preventive check and the actual vote claim
+      // hash the same address. getClientAddress() returned the proxy IP
+      // behind Caddy, so the preview never matched the real vote.
+      alreadyVoted = await hasVoted(locals.clientIp, code);
     } catch {
       // Redis-проблема не должна ломать сам опрос: разрешаем форму,
       // POST-эндпоинт всё равно перепроверит и вернёт 409 при дубле.
