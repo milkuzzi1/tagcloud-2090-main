@@ -25,9 +25,9 @@ export const users = pgTable(
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash'),
   emailVerified: boolean('email_verified').notNull().default(false),
-  emailVerifiedAt: timestamp('email_verified_at', {(withTimezone: true }),
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   role: userRole('role').notNull().default('user'),
-  deletedAt: timestamp('deleted_at', {(withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 }
 );
@@ -80,6 +80,20 @@ export const sessions = pgTable(
 (t) => ({
   userIdx: index('sessions_user_idx').on(t.userId),
   expiresIdx: index('sessions_expires_idx').on(t.expiresAt)
+})
+);
+
+export const organizationInvites = pgTable(
+'organization_invites',
+{
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull().unique(),
+  invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+  note: text('note'),
+  invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow()
+},
+(t) => ({
+  emailIdx: uniqueIndex('org_invites_email_idx').on(t.email)
 })
 );
 
