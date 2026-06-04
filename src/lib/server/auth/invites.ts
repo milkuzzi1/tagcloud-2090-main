@@ -159,14 +159,28 @@ export async function countAdmins(): Promise<number> {
 
 export type ChangeEmailResult = 'ok' | 'email_taken' | 'not_found';
 
-export async function changeAdminEmail(params: {
+/**
+ * Change a user's email. Generic over any user id (used both for an admin
+ * changing their own email and for an admin editing another user's email).
+ *
+ * Uniqueness is checked only against LIVE users (deleted_at IS NULL), matching
+ * the partial unique index on (email) WHERE deleted_at IS NULL — a soft-deleted
+ * row may legitimately share an email with a live one.
+ */
+export async function changeUserEmail(params: {
   userId: string;
   newEmail: string;
 }): Promise<ChangeEmailResult> {
   const [taken] = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(eq(users.email, params.newEmail), ne(users.id, params.userId)))
+    .where(
+      and(
+        eq(users.email, params.newEmail),
+        ne(users.id, params.userId),
+        isNull(users.deletedAt)
+      )
+    )
     .limit(1);
   if (taken) return 'email_taken';
 
@@ -178,6 +192,9 @@ export async function changeAdminEmail(params: {
 
   return updated.length > 0 ? 'ok' : 'not_found';
 }
+
+/** Back-compat alias used by the admin self-service change-email endpoint. */
+export const changeAdminEmail = changeUserEmail;
 
 // --- Admin handover (Req 2) ------------------------------------------------
 //
