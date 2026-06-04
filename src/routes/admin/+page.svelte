@@ -83,16 +83,29 @@
 
   async function confirmRemove() {
     if (!removingId) return;
-    // Server reads keepData from query string, not body
-    const r = await fetch(`/api/admin/users/${removingId}?keepData=${keepData}`, {
-      method: 'DELETE'
-    });
-    if (r.ok) {
-      members = members.filter((m) => m.id !== removingId);
-      removingId = null;
-    } else {
-      const body = await r.json().catch(() => ({}));
-      removeError = body.error?.message ?? 'Ошибка';
+    removeError = null;
+    try {
+      const r = await fetch(`/api/admin/users/${removingId}?keepData=${keepData}`, {
+        method: 'DELETE'
+      });
+      if (r.ok) {
+        members = members.filter((m) => m.id !== removingId);
+        removingId = null;
+        return;
+      }
+      // Try to parse error message, but don't crash if body is empty
+      let msg = 'Ошибка при удалении';
+      try {
+        const body = await r.json();
+        if (body?.error?.message) msg = body.error.message;
+        else if (body?.error?.code === 'last_admin') msg = 'Нельзя удалить последнего администратора';
+        else if (body?.error?.code === 'self') msg = 'Нельзя удалить самого себя';
+      } catch {
+        // empty body — use default message
+      }
+      removeError = msg;
+    } catch {
+      removeError = 'Сетевая ошибка';
     }
   }
 </script>
