@@ -8,5 +8,5 @@ export const load: PageServerLoad = async ({ locals }) => {
     listInvites(),
     listMembers()
   ]);
-  return { invites, members };
+  return { invites, members, currentUserId: locals.user!.id };
 };
