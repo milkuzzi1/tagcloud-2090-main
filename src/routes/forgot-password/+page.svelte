@@ -1,5 +1,4 @@
 <script lang="ts">
-  let organizationName = $state('');
   let email = $state('');
   let submitting = $state(false);
   let sent = $state(false);
@@ -13,7 +12,7 @@
       const r = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ organizationName, email })
+        body: JSON.stringify({ email })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -31,13 +30,13 @@
   }
 </script>
 
-<svelte:head><title>Восстановление пароля — Облако тегов 2090</title></svelte:head>
+<svelte:head><title>Восстановление пароль облако тегов 2090</title></svelte:head>
 
 <div class="auth">
   {#if sent}
     <h1>Проверьте почту</h1>
     <p>
-      Если такой пользователь существует, мы отправили ссылку для сброса пароля на <b>{email}</b>.
+      Esli takoj adres est' v sisteme, my otpravili ssylku dlya sbrosa paroly na <b>{email}</b>.
     </p>
     {#if ttlHours}
       <p class="muted">Ссылка действует {ttlHours} ч.</p>
@@ -45,24 +44,13 @@
     <p class="footer-link"><a href="/login">Назад ко входу</a></p>
   {:else}
     <h1>Забыли пароль?</h1>
-    <p class="muted">Введите название организации и email — пришлём ссылку для сброса.</p>
+    <p class="muted">Введите email — пришлём ссылку для сброса.</p>
     <form
       onsubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <label>
-        <span>Название организации</span>
-        <input
-          class="input"
-          type="text"
-          bind:value={organizationName}
-          required
-          maxlength="100"
-          autocomplete="organization"
-        />
-      </label>
       <label>
         <span>Email</span>
         <input
@@ -78,7 +66,7 @@
         <div class="alert alert-error">{errorMessage}</div>
       {/if}
       <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-        {submitting ? 'Отправляем…' : 'Отправить ссылку'}
+        {submitting ? 'Otpravlyaem...' : 'Отправить ссылку'}
       </button>
     </form>
     <p class="footer-link"><a href="/login">Вспомнил пароль</a></p>
