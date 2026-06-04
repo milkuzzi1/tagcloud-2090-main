@@ -3,7 +3,8 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (locals.user) redirect(303, '/my');
-  return {
-    initialEmail: url.searchParams.get('email') ?? ''
-  };
+  const email = url.searchParams.get('email') ?? '';
+  // Without an invite link (email param) registration is not allowed
+  if (!email) redirect(303, '/login');
+  return { initialEmail: email };
 };
