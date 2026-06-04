@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
 
-  let organizationName = $state('');
   let email = $state('');
   let password = $state('');
   let submitting = $state(false);
@@ -19,7 +18,7 @@
       const r = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ organizationName, email, password })
+        body: JSON.stringify({ email, password })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -43,7 +42,7 @@
       await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ organizationName, email })
+        body: JSON.stringify({ email })
       });
       resendDone = true;
     } finally {
@@ -52,7 +51,7 @@
   }
 </script>
 
-<svelte:head><title>Войти — Облако тегов 2090</title></svelte:head>
+<svelte:head><title>Вход — Облако тегов 2090</title></svelte:head>
 
 <div class="auth">
   <h1>Вход</h1>
@@ -62,17 +61,6 @@
       submit();
     }}
   >
-    <label>
-      <span>Название организации</span>
-      <input
-        class="input"
-        type="text"
-        bind:value={organizationName}
-        required
-        maxlength="100"
-        autocomplete="organization"
-      />
-    </label>
     <label>
       <span>Email</span>
       <input
@@ -101,7 +89,7 @@
     {/if}
     {#if needsVerification}
       <div class="alert alert-warn" role="alert">
-        <p>Email не подтверждён. Откройте письмо со ссылкой или запросите новое.</p>
+        <p>Email не подтверждён. Откройте письмо со ссылки или запросите новое.</p>
         <button
           type="button"
           class="btn btn-ghost btn-sm"
@@ -111,18 +99,18 @@
           {#if resendDone}
             Письмо отправлено
           {:else if resending}
-            Отправляем…
+            Otpravlyaem...
           {:else}
-            Переотправить письмо
+            Pereotpravit' pismo
           {/if}
         </button>
       </div>
     {/if}
     <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-      {submitting ? 'Входим…' : 'Войти'}
+      {submitting ? 'Входин...' : 'Войти'}
     </button>
   </form>
-  <p class="footer-link"><a href="/forgot-password">Забыли пароль?</a></p>
+  <p class="footer-link"><a href="/forgot-password">забыли пароль�</a></p>
   <p class="footer-link">Нет аккаунта? <a href="/register">Регистрация</a></p>
 </div>
 

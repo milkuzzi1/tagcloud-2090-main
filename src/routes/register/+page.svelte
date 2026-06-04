@@ -1,14 +1,7 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-
-  import { untrack } from 'svelte';
-
-  let { data }: { data: PageData } = $props();
-
   type Mode = 'user' | 'admin';
   let mode = $state<Mode>('user');
-  let organizationName = $state(untrack(() => data.initialOrg ?? ''));
-  let email = $state(untrack(() => data.initialEmail ?? ''));
+  let email = $state('');
   let password = $state('');
   let submitting = $state(false);
   let errorMessage = $state<string | null>(null);
@@ -23,7 +16,7 @@
       const r = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role: mode, organizationName, email, password })
+        body: JSON.stringify({ role: mode, email, password })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -50,7 +43,7 @@
       await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ organizationName, email: pending.email })
+        body: JSON.stringify({ email: pending.email })
       });
       resendDone = true;
     } finally {
@@ -65,12 +58,10 @@
   {#if pending}
     <h1>Письмо отправлено</h1>
     <p>
-      Мы отправили ссылку для подтверждения на <b>{pending.email}</b>. Откройте письмо и нажмите
-      кнопку, чтобы войти.
+      Мы отправили ссылку для подтверждения на
+      <b>{pending.email}</b>. Откройте письмо и нажмите кнопку.
     </p>
-    <p class="muted">
-      Ссылка действует {pending.ttlHours} ч. Не пришло — проверьте «Спам» или нажмите ниже.
-    </p>
+    <p class="muted">Ссылка действует {pending.ttlHours} ч.</p>
     <button
       type="button"
       class="btn btn-primary btn-block"
@@ -78,9 +69,9 @@
       disabled={resending || resendDone}
     >
       {#if resendDone}
-        Отправлено
+        Otpravleno
       {:else if resending}
-        Отправляем…
+        Otpravlyaem...
       {:else}
         Отправить письмо ещё раз
       {/if}
@@ -97,7 +88,7 @@
         class:active={mode === 'user'}
         onclick={() => (mode = 'user')}
       >
-        Я пользователь
+        Пользователь
       </button>
       <button
         type="button"
@@ -106,7 +97,7 @@
         class:active={mode === 'admin'}
         onclick={() => (mode = 'admin')}
       >
-        Я администратор
+        Администратор
       </button>
     </div>
 
@@ -116,17 +107,6 @@
         submit();
       }}
     >
-      <label>
-        <span>Название организации</span>
-        <input
-          class="input"
-          type="text"
-          bind:value={organizationName}
-          required
-          maxlength="100"
-          autocomplete="organization"
-        />
-      </label>
       <label>
         <span>Email</span>
         <input
@@ -154,7 +134,7 @@
         <div class="alert alert-error" role="alert">{errorMessage}</div>
       {/if}
       <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-        {submitting ? 'Создаём…' : mode === 'admin' ? 'Создать организацию' : 'Создать аккаунт'}
+        {submitting ? 'Sozdaem...' : mode === 'admin' ? 'Создать администратора' : 'Создать аккаунт'}
       </button>
     </form>
     <p class="footer-link">Уже есть аккаунт? <a href="/login">Войти</a></p>

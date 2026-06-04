@@ -3,15 +3,10 @@ import { listInvites, listMembers } from '$lib/server/auth/invites';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  const admin = requireAdmin(locals.user);
+  requireAdmin(locals.user);
   const [invites, members] = await Promise.all([
-    listInvites(admin.organizationId),
-    listMembers(admin.organizationId)
+    listInvites(),
+    listMembers()
   ]);
-  return {
-    organizationName: admin.organizationName,
-    invites,
-    members,
-    currentUserId: admin.id
-  };
+  return { invites, members };
 };
