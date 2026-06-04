@@ -3,12 +3,16 @@
 
   let { data }: { data: PageData } = $props();
 
+  // Split members reactively
+  let members = $state(data.members);
+  let admins = $derived(members.filter((m) => m.role === 'admin'));
+  let users = $derived(members.filter((m) => m.role !== 'admin'));
+
   // --- Create admin ---
   let createEmail = $state('');
   let creating = $state(false);
   let createMsg = $state<string | null>(null);
   let createError = $state<string | null>(null);
-  let members = $state(data.members);
 
   async function createAdmin() {
     creating = true;
@@ -25,53 +29,26 @@
         createError = body.error?.message ?? 'Ошибка';
         return;
       }
-      createMsg = `Ссылка для установки пароля отправлена на ${createEmail}${body.ttlHours ? ` (действует ${body.ttlHours} ч)` : ''}`;
+      createMsg = `Ссылка для установки пароля отправлена на ${createEmail}`;
+      // Add placeholder to admins list so it appears immediately
+      members = [
+        ...members,
+        {
+          id: body.userId ?? crypto.randomUUID(),
+          email: createEmail,
+          role: 'admin',
+          note: null,
+          createdAt: new Date(),
+          emailVerified: false
+        }
+      ];
       createEmail = '';
     } finally {
       creating = false;
     }
   }
 
-  // --- Invites ---
-  let inviteEmail = $state('');
-  let inviteNote = $state('');
-  let addingInvite = $state(false);
-  let inviteMsg = $state<string | null>(null);
-  let inviteError = $state<string | null>(null);
-  let invites = $state(data.invites);
-
-  async function addInvite() {
-    addingInvite = true;
-    inviteMsg = null;
-    inviteError = null;
-    try {
-      const r = await fetch('/api/admin/invites', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail, note: inviteNote || undefined })
-      });
-      const body = await r.json();
-      if (!r.ok) {
-        inviteError = body.error?.message ?? 'Ошибка';
-        return;
-      }
-      inviteMsg = 'Добавлено';
-      if (body.invite && !invites.some((i) => i.id === body.invite.id)) {
-        invites = [...invites, body.invite];
-      }
-      inviteEmail = '';
-      inviteNote = '';
-    } finally {
-      addingInvite = false;
-    }
-  }
-
-  async function removeInvite(id: string) {
-    const r = await fetch(`/api/admin/invites/${id}`, { method: 'DELETE' });
-    if (r.ok) invites = invites.filter((i) => i.id !== id);
-  }
-
-  // --- Members ---
+  // --- Remove member ---
   let removingId = $state<string | null>(null);
   let keepData = $state(true);
   let removeError = $state<string | null>(null);
@@ -93,16 +70,13 @@
         removingId = null;
         return;
       }
-      // Try to parse error message, but don't crash if body is empty
       let msg = 'Ошибка при удалении';
       try {
         const body = await r.json();
-        if (body?.error?.message) msg = body.error.message;
-        else if (body?.error?.code === 'last_admin') msg = 'Нельзя удалить последнего администратора';
+        if (body?.error?.code === 'last_admin') msg = 'Нельзя удалить последнего администратора';
         else if (body?.error?.code === 'self') msg = 'Нельзя удалить самого себя';
-      } catch {
-        // empty body — use default message
-      }
+        else if (body?.error?.message) msg = body.error.message;
+      } catch { /* empty body */ }
       removeError = msg;
     } catch {
       removeError = 'Сетевая ошибка';
@@ -115,69 +89,50 @@
 <div class="page">
   <h1>Администратор</h1>
 
-  <!-- Create admin -->
+  <!-- Admins list -->
   <section>
-    <h2>Создать админа</h2>
-    <p class="muted">Укажите email — отправим ссылку для установки пароля.</p>
+    <h2>Администраторы</h2>
+    <p class="muted">Добавьте нового администратора — ему придёт письмо со ссылкой для установки пароля.</p>
     <form onsubmit={(e) => { e.preventDefault(); createAdmin(); }}>
       <input class="input" type="email" bind:value={createEmail} placeholder="admin@example.com" required maxlength="254" />
       <button type="submit" class="btn btn-primary" disabled={creating}>
-        {creating ? 'Создаём...' : 'Создать'}
+        {creating ? 'Создаём...' : 'Добавить администратора'}
       </button>
     </form>
     {#if createMsg}<p class="success">{createMsg}</p>{/if}
     {#if createError}<p class="error">{createError}</p>{/if}
-  </section>
 
-  <!-- Invites -->
-  <section>
-    <h2>Допущенные email</h2>
-    <form onsubmit={(e) => { e.preventDefault(); addInvite(); }}>
-      <input class="input" type="email" bind:value={inviteEmail} placeholder="user@example.com" required maxlength="254" />
-      <input class="input" type="text" bind:value={inviteNote} placeholder="Примечание (необязательно)" maxlength="200" />
-      <button type="submit" class="btn btn-primary" disabled={addingInvite}>
-        {addingInvite ? 'Добавляем...' : 'Добавить'}
-      </button>
-    </form>
-    {#if inviteMsg}<p class="success">{inviteMsg}</p>{/if}
-    {#if inviteError}<p class="error">{inviteError}</p>{/if}
-
-    {#if invites.length === 0}
-      <p class="muted">Приглашений пока нет.</p>
+    {#if admins.length === 0}
+      <p class="muted">Администраторов пока нет.</p>
     {:else}
       <ul class="list">
-        {#each invites as inv (inv.id)}
+        {#each admins as m (m.id)}
           <li>
-            <span class="email">{inv.email}</span>
-            {#if inv.note}<span class="note">{inv.note}</span>{/if}
-            {#if inv.registered}
-              <span class="badge badge-ok">зарегистрирован</span>
+            <span class="email">{m.email}</span>
+            {#if !m.emailVerified}<span class="badge badge-muted">не подтверждён</span>{/if}
+            {#if m.id === data.currentUserId}
+              <span class="badge badge-you">вы</span>
             {:else}
-              <span class="badge badge-muted">ожидает</span>
+              <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
             {/if}
-            <button class="btn btn-sm btn-danger" onclick={() => removeInvite(inv.id)}>Удалить</button>
           </li>
         {/each}
       </ul>
     {/if}
   </section>
 
-  <!-- Members -->
+  <!-- Users list -->
   <section>
     <h2>Пользователи</h2>
-    {#if members.length === 0}
+    {#if users.length === 0}
       <p class="muted">Пользователей пока нет.</p>
     {:else}
       <ul class="list">
-        {#each members as m (m.id)}
+        {#each users as m (m.id)}
           <li>
             <span class="email">{m.email}</span>
-            {#if m.role === 'admin'}<span class="badge badge-admin">админ</span>{/if}
             {#if !m.emailVerified}<span class="badge badge-muted">не подтверждён</span>{/if}
-            {#if m.id === data.currentUserId}<span class="badge badge-you">вы</span>{/if}
-            {#if m.id !== data.currentUserId}
-              <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
-            {/if}
+            <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
           </li>
         {/each}
       </ul>
@@ -219,12 +174,9 @@
   .input { flex: 1; min-width: 180px; }
   .list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
   .list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) 0; border-bottom: 1px solid var(--c-border); }
-  .email { font-weight: 500; }
-  .note { color: var(--c-muted); font-size: 0.85rem; }
+  .email { font-weight: 500; flex: 1; }
   .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
-  .badge-ok { background: var(--c-success-bg); color: var(--c-success); }
   .badge-muted { background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); }
-  .badge-admin { background: var(--c-primary-bg, #e8f0fe); color: var(--c-primary, #1a56db); }
   .badge-you { background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); }
   .btn-sm { padding: 2px 10px; font-size: 0.8rem; }
   .success { color: var(--c-success); margin-top: var(--space-2); }
