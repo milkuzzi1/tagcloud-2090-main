@@ -3,13 +3,20 @@
 
   let { data }: { data: PageData } = $props();
 
+  // Initial values seeded from the load() data. These lists are then mutated
+  // locally for optimistic UI (add/remove invite, remove member, email change),
+  // so they are $state, not $derived. Reading the props once here is
+  // intentional (snapshot), hence the indirection to avoid the
+  // state_referenced_locally hint.
+  const initial = data;
+
   // --- Members ---
-  let members = $state(data.members);
+  let members = $state(initial.members);
   let admins = $derived(members.filter((m) => m.role === 'admin'));
   let users = $derived(members.filter((m) => m.role !== 'admin'));
 
   // --- Allowlist invites (Req 4a / Req 5) ---
-  let invites = $state(data.invites);
+  let invites = $state(initial.invites);
   let inviteEmail = $state('');
   let inviteNote = $state('');
   let invitingBusy = $state(false);
@@ -50,7 +57,7 @@
   }
 
   // --- Change admin email (Req 4b) ---
-  let newEmail = $state(data.currentUserEmail);
+  let newEmail = $state(initial.currentUserEmail);
   let currentPassword = $state('');
   let emailBusy = $state(false);
   let emailMsg = $state<string | null>(null);
@@ -117,6 +124,12 @@
   function openRemove(id: string) {
     removingId = id;
     removeError = null;
+  }
+
+  // Focus the dialog on open so Escape works immediately and screen readers
+  // move into the modal.
+  function autofocus(node: HTMLElement) {
+    node.focus();
   }
 
   async function confirmRemove() {
@@ -262,9 +275,23 @@
 <!-- Remove modal (Req 6) -->
 {#if removingId}
   {@const target = members.find((m) => m.id === removingId)}
-  <div class="modal-backdrop" role="presentation" onclick={() => (removingId = null)}>
-    <div class="modal" role="dialog" onclick={(e) => e.stopPropagation()}>
-      <h2>Удалить пользователя?</h2>
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={() => (removingId = null)}
+    onkeydown={(e) => { if (e.key === 'Escape') removingId = null; }}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="remove-modal-title"
+      tabindex="-1"
+      use:autofocus
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
+      <h2 id="remove-modal-title">Удалить пользователя?</h2>
       <p>Удалить <strong>{target?.email}</strong></p>
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={keepData} />
