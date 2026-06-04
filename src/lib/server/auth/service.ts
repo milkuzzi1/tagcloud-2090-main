@@ -10,6 +10,7 @@ import {
   createPasswordResetToken,
   type PasswordResetToken
 } from './password-reset';
+import { isAllowlisted } from './invites';
 import type { RegisterInput, ForgotPassword, LoginInput } from './validation';
 
 function isEmailVerificationDisabled(): boolean {
@@ -28,7 +29,8 @@ export type RegisterResult =
       status: 'auto_verified';
       user: AuthUser;
     }
-  | { ok: false; code: 'email_taken'; message: string };
+  | { ok: false; code: 'email_taken'; message: string }
+  | { ok: false; code: 'not_invited'; message: string };
 
 export type LoginResult =
   | { ok: true; user: AuthUser; sessionId: string; expiresAt: Date }
@@ -36,6 +38,12 @@ export type LoginResult =
   | { ok: false; code: 'email_not_verified'; message: string; userId: string; email: string };
 
 export async function register(input: RegisterInput): Promise<RegisterResult> {
+  // Only allowlisted emails may register as regular users
+  const allowed = await isAllowlisted({ email: input.email });
+  if (!allowed) {
+    return { ok: false, code: 'not_invited', message: 'Регистрация недоступна. Обратитесь к администратору.' };
+  }
+
   const passwordHash = await hashPassword(input.password);
   const autoVerify = isEmailVerificationDisabled();
   const now = new Date();
@@ -145,7 +153,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   const passwordOk = await verifyPassword(input.password, hashToCheck);
 
   if (!u || !u.passwordHash || !passwordOk) {
-    return { ok: false, code: 'invalid_credentials', message: 'Неверные данные для жхода' };
+    return { ok: false, code: 'invalid_credentials', message: 'Неверные данные для входа' };
   }
   if (!u.emailVerified) {
     return {
@@ -209,7 +217,7 @@ export async function consumePasswordReset(input: {
     .limit(1);
 
   if (!u) {
-    return { ok: false, code: 'invalid', message: 'Пользователь не найдёо' };
+    return { ok: false, code: 'invalid', message: 'Пользователь не найден' };
   }
 
   const { id: sessionId, expiresAt } = await createSession(u.id);
