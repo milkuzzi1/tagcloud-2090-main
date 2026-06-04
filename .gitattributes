@@ -1,0 +1,11 @@
+# Enforce UTF-8 + LF for source so editor/encoding incidents (e.g. a mangled
+# comment) don't recur and don't produce noisy cross-platform diffs.
+* text=auto eol=lf working-tree-encoding=UTF-8
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

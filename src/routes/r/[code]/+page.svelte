@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import type { PageProps } from './$types';
 
   let { data }: PageProps = $props();
@@ -33,24 +33,22 @@
   let errorMessage = $state<string | null>(null);
   let errorQuestionId = $state<string | null>(null);
 
-  const VOTED_KEY = `voted:${survey.code}`;
-
-  onMount(() => {
-    // Серверный hasVoted уже мог поставить screen='already', но если
-    // localStorage клиента уже знает, что отвечали — тоже учитываем
-    // (на случай задержки Redis или окончания TTL voted-ключа).
-    if (screen === 'form' && typeof localStorage !== 'undefined') {
-      if (localStorage.getItem(VOTED_KEY)) screen = 'already';
-    }
-  });
 
   function stripWhitespace(s: string): string {
     return s.replace(/\s+/g, '');
   }
 
+  // Single-word answers only. Instead of silently swallowing the spacebar
+  // (which feels broken to the user), we prevent the space but surface a
+  // short, screen-reader-announced hint explaining why.
+  let spaceHint = $state(false);
+  let spaceHintTimer: ReturnType<typeof setTimeout> | undefined;
   function blockSpace(e: KeyboardEvent) {
     if (e.key === ' ' || e.code === 'Space') {
       e.preventDefault();
+      spaceHint = true;
+      clearTimeout(spaceHintTimer);
+      spaceHintTimer = setTimeout(() => (spaceHint = false), 2500);
     }
   }
 
@@ -161,16 +159,10 @@
       const body = await r.json().catch(() => null);
 
       if (r.ok) {
-        try {
-          localStorage.setItem(VOTED_KEY, '1');
-        } catch {}
         screen = 'sent';
         return;
       }
       if (r.status === 409) {
-        try {
-          localStorage.setItem(VOTED_KEY, '1');
-        } catch {}
         screen = 'already';
         return;
       }
@@ -200,7 +192,7 @@
   <div class="state {screen === 'already' ? 'state-already' : 'state-sent'}">
     <div class="state-icon" aria-hidden="true">✓</div>
     {#if screen === 'already'}
-      <h1>Ты уже отвечал</h1>
+      <h1>Вы уже ответили</h1>
       <p class="muted">Ваш ответ записан. Спасибо за участие!</p>
     {:else}
       <h1>Спасибо!</h1>
@@ -221,7 +213,7 @@
       }}
     >
       <fieldset class="question" class:has-error={errorQuestionId === currentQuestion.id}>
-        <legend>
+        <legend id="q-{currentQuestion.id}-label">
           <span class="num">{currentIdx + 1}.</span>
           {currentQuestion.text}
         </legend>
@@ -235,10 +227,16 @@
           maxlength="50"
           placeholder="одно слово"
           autocomplete="off"
+          aria-labelledby="q-{currentQuestion.id}-label"
+          aria-describedby="q-{currentQuestion.id}-hint"
+          aria-invalid={errorQuestionId === currentQuestion.id}
           disabled={reachedLimit && currentQuestion.answerType === 'multi'}
         />
+        {#if spaceHint}
+          <div class="hint hint-space" role="status">Только одно слово — пробелы не используются</div>
+        {/if}
         {#if currentQuestion.answerType === 'multi'}
-          <div class="hint">
+          <div class="hint" id="q-{currentQuestion.id}-hint">
             Ответов: {currentAnswers.length} / {currentMax}
           </div>
           {#if currentAnswers.length > 0}
@@ -259,7 +257,7 @@
             </ul>
           {/if}
         {:else}
-          <div class="hint">Только одно слово, без пробелов</div>
+          <div class="hint" id="q-{currentQuestion.id}-hint">Только одно слово, без пробелов</div>
         {/if}
       </fieldset>
 
@@ -367,6 +365,10 @@
   .hint {
     color: var(--c-muted);
     font-size: 0.875rem;
+  }
+  .hint-space {
+    color: var(--c-accent, #b45309);
+    margin-top: var(--space-2);
   }
   .chips {
     list-style: none;

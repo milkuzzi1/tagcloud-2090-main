@@ -6,6 +6,7 @@ import { registerAdmin } from '$lib/server/auth/service';
 import { createPasswordResetToken, PASSWORD_RESET_TTL_HOURS } from '$lib/server/auth/password-reset';
 import { sendPasswordResetEmail } from '$lib/server/email/password-reset';
 import { log } from '$lib/server/log';
+import { resolvePublicBaseUrl } from '$lib/server/net/base-url';
 import type { RequestHandler } from './$types';
 
 const Body = z.object({
@@ -29,7 +30,7 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   }
 
   const token = await createPasswordResetToken(result.user.id);
-  const baseUrl = env.PUBLIC_BASE_URL || env.ORIGIN || url.origin;
+  const baseUrl = resolvePublicBaseUrl(url.origin);
   const setPasswordUrl = `${baseUrl}/reset-password?t=${token.token}`;
   const organizationName = env.APP_NAME || '\u041e\u0431\u043b\u0430\u043a\u043e \u0442\u0435\u0433\u043e\u0432 2090';
 
