@@ -8,6 +8,7 @@
   let creating = $state(false);
   let createMsg = $state<string | null>(null);
   let createError = $state<string | null>(null);
+  let members = $state(data.members);
 
   async function createAdmin() {
     creating = true;
@@ -21,10 +22,10 @@
       });
       const body = await r.json();
       if (!r.ok) {
-        createError = body.error?.message ?? 'Ошибка';
+        createError = body.error?.message ?? '\u041e\u0448\u0438\u0431\u043a\u0430';
         return;
       }
-      createMsg = `Ссылка для установки пароля отправлена на ${createEmail}${body.ttlHours ? ` (действует ${body.ttlHours} ч)` : ''}`;
+      createMsg = `\u0421\u0441\u044b\u043b\u043a\u0430 \u0434\u043b\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438 \u043f\u0430\u0440\u043e\u043b\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0430 \u043d\u0430 ${createEmail}${body.ttlHours ? ` (\u0434\u0435\u0439\u0441\u0442\u0432\u0443\u0435\u0442 ${body.ttlHours}\u00a0\u0447)` : ''}`;
       createEmail = '';
     } finally {
       creating = false;
@@ -51,11 +52,14 @@
       });
       const body = await r.json();
       if (!r.ok) {
-        inviteError = body.error?.message ?? 'Ошибка';
+        inviteError = body.error?.message ?? '\u041e\u0448\u0438\u0431\u043a\u0430';
         return;
       }
-      inviteMsg = 'Добавлено';
-      invites = [...invites, body.invite];
+      inviteMsg = '\u0414\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e';
+      // Avoid duplicates: only add if not already in list
+      if (body.invite && !invites.some((i) => i.id === body.invite.id)) {
+        invites = [...invites, body.invite];
+      }
       inviteEmail = '';
       inviteNote = '';
     } finally {
@@ -69,7 +73,6 @@
   }
 
   // --- Members ---
-  let members = $state(data.members);
   let removingId = $state<string | null>(null);
   let keepData = $state(true);
   let removeError = $state<string | null>(null);
@@ -81,7 +84,7 @@
 
   async function confirmRemove() {
     if (!removingId) return;
-    const r = await fetch(`/api/admin/members/${removingId}`, {
+    const r = await fetch(`/api/admin/users/${removingId}`, {
       method: 'DELETE',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ keepData })
@@ -91,24 +94,24 @@
       removingId = null;
     } else {
       const body = await r.json().catch(() => ({}));
-      removeError = body.error?.message ?? 'Ошибка';
+      removeError = body.error?.message ?? '\u041e\u0448\u0438\u0431\u043a\u0430';
     }
   }
 </script>
 
-<svelte:head><title>Администратор — Облако тегов 2090</title></svelte:head>
+<svelte:head><title>\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440 \u2014 \u041e\u0431\u043b\u0430\u043a\u043e \u0442\u0435\u0433\u043e\u0432 2090</title></svelte:head>
 
 <div class="page">
-  <h1>Администратор</h1>
+  <h1>\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440</h1>
 
   <!-- Create admin -->
   <section>
-    <h2>Создать админа</h2>
-    <p class="muted">Укажите email — отправим ссылку для установки пароля.</p>
+    <h2>\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0430\u0434\u043c\u0438\u043d\u0430</h2>
+    <p class="muted">\u0423\u043a\u0430\u0436\u0438\u0442\u0435 email \u2014 \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u043c \u0441\u0441\u044b\u043b\u043a\u0443 \u0434\u043b\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438 \u043f\u0430\u0440\u043e\u043b\u044f.</p>
     <form onsubmit={(e) => { e.preventDefault(); createAdmin(); }}>
       <input class="input" type="email" bind:value={createEmail} placeholder="admin@example.com" required maxlength="254" />
       <button type="submit" class="btn btn-primary" disabled={creating}>
-        {creating ? 'Создаём...' : 'Создать'}
+        {creating ? '\u0421\u043e\u0437\u0434\u0430\u0451\u043c...' : '\u0421\u043e\u0437\u0434\u0430\u0442\u044c'}
       </button>
     </form>
     {#if createMsg}<p class="success">{createMsg}</p>{/if}
@@ -117,19 +120,19 @@
 
   <!-- Invites -->
   <section>
-    <h2>Допущенные email</h2>
+    <h2>\u0414\u043e\u043f\u0443\u0449\u0435\u043d\u043d\u044b\u0435 email</h2>
     <form onsubmit={(e) => { e.preventDefault(); addInvite(); }}>
       <input class="input" type="email" bind:value={inviteEmail} placeholder="user@example.com" required maxlength="254" />
-      <input class="input" type="text" bind:value={inviteNote} placeholder="Примечание (необязательно)" maxlength="200" />
+      <input class="input" type="text" bind:value={inviteNote} placeholder="\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435 (\u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e)" maxlength="200" />
       <button type="submit" class="btn btn-primary" disabled={addingInvite}>
-        {addingInvite ? 'Добавляем...' : 'Добавить'}
+        {addingInvite ? '\u0414\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u043c...' : '\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c'}
       </button>
     </form>
     {#if inviteMsg}<p class="success">{inviteMsg}</p>{/if}
     {#if inviteError}<p class="error">{inviteError}</p>{/if}
 
     {#if invites.length === 0}
-      <p class="muted">Приглашений пока нет.</p>
+      <p class="muted">\u041f\u0440\u0438\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0439 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442.</p>
     {:else}
       <ul class="list">
         {#each invites as inv (inv.id)}
@@ -137,11 +140,11 @@
             <span class="email">{inv.email}</span>
             {#if inv.note}<span class="note">{inv.note}</span>{/if}
             {#if inv.registered}
-              <span class="badge badge-ok">зарегистрирован</span>
+              <span class="badge badge-ok">\u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d</span>
             {:else}
-              <span class="badge badge-muted">ожидает</span>
+              <span class="badge badge-muted">\u043e\u0436\u0438\u0434\u0430\u0435\u0442</span>
             {/if}
-            <button class="btn btn-sm btn-danger" onclick={() => removeInvite(inv.id)}>Удалить</button>
+            <button class="btn btn-sm btn-danger" onclick={() => removeInvite(inv.id)}>\u0423\u0434\u0430\u043b\u0438\u0442\u044c</button>
           </li>
         {/each}
       </ul>
@@ -150,18 +153,20 @@
 
   <!-- Members -->
   <section>
-    <h2>Пользователи</h2>
+    <h2>\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438</h2>
     {#if members.length === 0}
-      <p class="muted">Пользователей пока нет.</p>
+      <p class="muted">\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442.</p>
     {:else}
       <ul class="list">
         {#each members as m (m.id)}
           <li>
             <span class="email">{m.email}</span>
-            {#if m.role === 'admin'}<span class="badge badge-admin">админ</span>{/if}
-            {#if !m.emailVerified}<span class="badge badge-muted">не подтверждён</span>{/if}
-            {#if m.id === data.currentUserId}<span class="badge badge-you">вы</span>{/if}
-            <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
+            {#if m.role === 'admin'}<span class="badge badge-admin">\u0430\u0434\u043c\u0438\u043d</span>{/if}
+            {#if !m.emailVerified}<span class="badge badge-muted">\u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d</span>{/if}
+            {#if m.id === data.currentUserId}<span class="badge badge-you">\u0432\u044b</span>{/if}
+            {#if m.id !== data.currentUserId}
+              <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>\u0423\u0434\u0430\u043b\u0438\u0442\u044c</button>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -174,21 +179,21 @@
   {@const target = members.find((m) => m.id === removingId)}
   <div class="modal-backdrop" role="presentation" onclick={() => (removingId = null)}>
     <div class="modal" role="dialog" onclick={(e) => e.stopPropagation()}>
-      <h2>Удалить пользователя?</h2>
-      <p>Удалить <strong>{target?.email}</strong></p>
+      <h2>\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f?</h2>
+      <p>\u0423\u0434\u0430\u043b\u0438\u0442\u044c <strong>{target?.email}</strong></p>
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={keepData} />
-        Оставить данные в БД
+        \u041e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435 \u0432 \u0411\u0414
       </label>
       <p class="hint muted">
         {keepData
-          ? 'Пользователь не сможет войти, но данные сохранятся.'
-          : 'Пользователь и все его данные будут удалены.'}
+          ? '\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u043d\u0435 \u0441\u043c\u043e\u0436\u0435\u0442 \u0432\u043e\u0439\u0442\u0438, \u043d\u043e \u0434\u0430\u043d\u043d\u044b\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u0441\u044f.'
+          : '\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c \u0438 \u0432\u0441\u0435 \u0435\u0433\u043e \u0434\u0430\u043d\u043d\u044b\u0435 \u0431\u0443\u0434\u0443\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u044b.'}
       </p>
       {#if removeError}<p class="error">{removeError}</p>{/if}
       <div class="modal-actions">
-        <button class="btn" onclick={() => (removingId = null)}>Отмена</button>
-        <button class="btn btn-danger" onclick={confirmRemove}>Удалить</button>
+        <button class="btn" onclick={() => (removingId = null)}>\u041e\u0442\u043c\u0435\u043d\u0430</button>
+        <button class="btn btn-danger" onclick={confirmRemove}>\u0423\u0434\u0430\u043b\u0438\u0442\u044c</button>
       </div>
     </div>
   </div>
