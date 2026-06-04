@@ -28,6 +28,26 @@ function outgoingRemovalAction(keepOutgoingData: boolean): RemovalAction {
   return keepOutgoingData ? 'soft_delete' : 'hard_delete';
 }
 
+// Variant (A): an incoming person who already has a password can sign in
+// immediately, so the handover completes now; otherwise it is deferred until
+// they set a password via the emailed link. Mirrors transfer-admin/+server.ts.
+function handoverCompletesImmediately(incomingHasPassword: boolean): boolean {
+  return incomingHasPassword;
+}
+
+// Deterministic login ordering: prefer an admin row, then earliest created.
+// Mirrors the ORDER BY in service.login / promoteOrCreateAdmin.
+function pickLoginRow(
+  rows: { role: 'admin' | 'user'; createdAt: number }[]
+): { role: 'admin' | 'user'; createdAt: number } | undefined {
+  return [...rows].sort((a, b) => {
+    const ra = a.role === 'admin' ? 0 : 1;
+    const rb = b.role === 'admin' ? 0 : 1;
+    if (ra !== rb) return ra - rb;
+    return a.createdAt - b.createdAt;
+  })[0];
+}
+
 describe('admin handover invariants', () => {
   it('allows transfer only for the sole admin', () => {
     expect(canTransfer(1)).toBe(true);
@@ -43,5 +63,26 @@ describe('admin handover invariants', () => {
   it('maps keepData to the correct removal action for the outgoing admin', () => {
     expect(outgoingRemovalAction(true)).toBe('soft_delete');
     expect(outgoingRemovalAction(false)).toBe('hard_delete');
+  });
+
+  it('completes immediately only when the incoming person already has a password', () => {
+    expect(handoverCompletesImmediately(true)).toBe(true);
+    expect(handoverCompletesImmediately(false)).toBe(false);
+  });
+
+  it('login prefers a live admin row over a user row with the same email', () => {
+    const picked = pickLoginRow([
+      { role: 'user', createdAt: 100 },
+      { role: 'admin', createdAt: 200 }
+    ]);
+    expect(picked).toEqual({ role: 'admin', createdAt: 200 });
+  });
+
+  it('login falls back to earliest row when no admin exists', () => {
+    const picked = pickLoginRow([
+      { role: 'user', createdAt: 300 },
+      { role: 'user', createdAt: 150 }
+    ]);
+    expect(picked).toEqual({ role: 'user', createdAt: 150 });
   });
 });

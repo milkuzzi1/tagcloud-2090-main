@@ -12,6 +12,7 @@ index,
 uniqueIndex,
 pgEnum
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const colorScheme = pgEnum('color_scheme', ['mono', 'random', 'custom', 'custom_gradient']);
 export const answerType = pgEnum('answer_type', ['single', 'multi']);
@@ -22,14 +23,22 @@ export const users = pgTable(
 'users',
 {
   id: uuid('id').defaultRandom().primaryKey(),
-  email: text('email').notNull().unique(),
+  // Uniqueness is enforced by a PARTIAL unique index on (email) WHERE
+  // deleted_at IS NULL (see migration 0007). It is not a plain column UNIQUE
+  // because soft-deleted rows may share an email with the live row.
+  email: text('email').notNull(),
   passwordHash: text('password_hash'),
   emailVerified: boolean('email_verified').notNull().default(false),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   role: userRole('role').notNull().default('user'),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
-}
+},
+(t) => ({
+  emailLiveUnique: uniqueIndex('users_email_live_unique')
+    .on(t.email)
+    .where(sql`${t.deletedAt} IS NULL`)
+})
 );
 
 export const emailVerificationTokens = pgTable(
