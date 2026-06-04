@@ -1,6 +1,4 @@
 <script lang="ts">
-  type Mode = 'user' | 'admin';
-  let mode = $state<Mode>('user');
   let email = $state('');
   let password = $state('');
   let submitting = $state(false);
@@ -16,7 +14,7 @@
       const r = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role: mode, email, password })
+        body: JSON.stringify({ role: 'user', email, password })
       });
       const body = await r.json();
       if (!r.ok) {
@@ -58,8 +56,8 @@
   {#if pending}
     <h1>Письмо отправлено</h1>
     <p>
-      Мы отправили ссылку для подтверждения на
-      <b>{pending.email}</b>. Откройте письмо и нажмите кнопку.
+      My otpravili sssylku dlya podtverzhdeniya na <b>{pending.email}</b>.
+      Otkroyte pis&mo i nazhmite knopku.
     </p>
     <p class="muted">Ссылка действует {pending.ttlHours} ч.</p>
     <button
@@ -79,28 +77,6 @@
     <p class="footer-link"><a href="/login">Назад ко входу</a></p>
   {:else}
     <h1>Регистрация</h1>
-
-    <div class="mode-switch" role="tablist" aria-label="Режим регистрации">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === 'user'}
-        class:active={mode === 'user'}
-        onclick={() => (mode = 'user')}
-      >
-        Пользователь
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === 'admin'}
-        class:active={mode === 'admin'}
-        onclick={() => (mode = 'admin')}
-      >
-        Администратор
-      </button>
-    </div>
-
     <form
       onsubmit={(e) => {
         e.preventDefault();
@@ -134,7 +110,7 @@
         <div class="alert alert-error" role="alert">{errorMessage}</div>
       {/if}
       <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-        {submitting ? 'Sozdaem...' : mode === 'admin' ? 'Создать администратора' : 'Создать аккаунт'}
+        {submitting ? 'Sozdaem...' : 'Создать аккаунт'}
       </button>
     </form>
     <p class="footer-link">Уже есть аккаунт? <a href="/login">Войти</a></p>
@@ -147,30 +123,7 @@
     margin: 0 auto;
   }
   h1 {
-    margin-bottom: var(--space-2);
-  }
-  .mode-switch {
-    display: flex;
-    gap: var(--space-1);
-    background: var(--c-surface);
-    padding: var(--space-1);
-    border-radius: var(--radius);
-    margin-top: var(--space-4);
-  }
-  .mode-switch button {
-    flex: 1;
-    border: none;
-    background: transparent;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius);
-    cursor: pointer;
-    font: inherit;
-    color: var(--c-muted);
-  }
-  .mode-switch button.active {
-    background: var(--c-bg);
-    color: var(--c-fg);
-    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--space-6);
   }
   form {
     display: flex;
@@ -180,7 +133,6 @@
     padding: var(--space-6);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    margin-top: var(--space-4);
   }
   label {
     display: flex;

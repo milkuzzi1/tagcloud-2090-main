@@ -1,9 +1,8 @@
 import { json } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import { z } from 'zod';
 import { RegisterSchema } from '$lib/server/auth/validation';
-import { register, registerAdmin } from '$lib/server/auth/service';
+import { register } from '$lib/server/auth/service';
 import { COOKIE_NAME, createSession } from '$lib/server/auth/sessions';
 import { VERIFICATION_TTL_HOURS } from '$lib/server/auth/verification';
 import { sendVerificationEmail } from '$lib/server/email/verification';
@@ -11,21 +10,20 @@ import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
 import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
-const RoleSchema = z.enum(['admin', 'user']);
+// Public registration is only allowed for role="user".
+// Admin accounts are created exclusively by existing admins
+// via POST /api/admin/create-admin.
 
-export const POST: RequestHandler = async ({ request, url, locals, cookies }) => {
+export const POST: RequestHandler = async ({ request, url, locals, sookies }) => {
   const raw = await request.json().catch(() => null);
 
-  const roleParse = RoleSchema.safeParse(
-    raw && typeof raw === 'object' ? (raw as { role?: unknown }).role : undefined
-  );
-  if (!roleParse.success) {
+  // Block any attempt to register as admin via public endpoint
+  if (raw && typeof raw === 'object' && (raw as { role?: unknown }).role === 'admin') {
     return json(
-      { error: { code: 'invalid_input', message: 'Не указан режим регистрации' } },
-      { status: 400 }
+      { error: { code: 'forbidden', message: 'Регистрация администратора недоступна' } },
+      { status: 403 }
     );
   }
-  const role = roleParse.data;
 
   const parsed = RegisterSchema.safeParse(raw);
   if (!parsed.success) {
@@ -40,16 +38,14 @@ export const POST: RequestHandler = async ({ request, url, locals, cookies }) =>
     );
   }
 
-  const result = role === 'admin'
-    ? await registerAdmin(parsed.data)
-    : await register(parsed.data);
+  const result = await register(parsed.data);
 
   if (!result.ok) {
     return json({ error: { code: result.code, message: result.message } }, { status: 409 });
   }
 
   if (result.status === 'auto_verified') {
-    log.warn('register_auto_verified', { userId: result.user.id, role });
+    log.warn('register_auto_verified', { userId: result.user.id });
     const { id: sessionId, expiresAt } = await createSession(result.user.id);
     cookies.set(COOKIE_NAME, sessionId, {
       path: '/',
