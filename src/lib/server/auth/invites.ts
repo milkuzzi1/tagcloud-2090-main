@@ -60,22 +60,25 @@ export async function removeInvite(params: {
 }
 
 export async function listInvites(): Promise<InviteRow[]> {
+  // Note: we avoid selecting users.id alongside organizationInvites.id
+  // because postgres-js collapses duplicate column names in the result set.
+  // Instead we select users.email (aliased as userEmail) to detect registration.
   const rows = await db
     .select({
-      inviteId: organizationInvites.id,
+      id: organizationInvites.id,
       email: organizationInvites.email,
       note: organizationInvites.note,
       invitedAt: organizationInvites.invitedAt,
-      userId: users.id
+      userEmail: users.email
     })
     .from(organizationInvites)
     .leftJoin(users, and(eq(users.email, organizationInvites.email), isNull(users.deletedAt)));
   return rows.map((r) => ({
-    id: r.inviteId,
+    id: r.id,
     email: r.email,
     note: r.note,
     invitedAt: r.invitedAt,
-    registered: r.userId != null
+    registered: r.userEmail != null
   }));
 }
 
