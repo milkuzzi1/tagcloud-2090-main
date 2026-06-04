@@ -111,7 +111,6 @@
     </button>
   </form>
   <p class="footer-link"><a href="/forgot-password">Забыли пароль?</a></p>
-  <p class="footer-link">Нет аккаунта? <a href="/register">Регистрация</a></p>
 </div>
 
 <style>
