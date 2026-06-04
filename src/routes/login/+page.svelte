@@ -26,7 +26,7 @@
           needsVerification = true;
           return;
         }
-        errorMessage = body.error?.message ?? 'ÐžÑˆÐ¸Ð±ÐºÐ° Ð²Ñ…Ð¾Ð´Ð°';
+        errorMessage = body.error?.message ?? 'Ошибка входа';
         return;
       }
       await invalidateAll();
@@ -51,10 +51,10 @@
   }
 </script>
 
-<svelte:head><title>Ð’Ñ…Ð¾Ð´ â€” ÐžÐ±Ð»Ð°ÐºÐ¾ Ñ‚ÐµÐ³Ð¾Ð² 2090</title></svelte:head>
+<svelte:head><title>Вход — Облако тегов 2090</title></svelte:head>
 
 <div class="auth">
-  <h1>Ð’Ñ…Ð¾Ð´</h1>
+  <h1>Вход</h1>
   <form
     onsubmit={(e) => {
       e.preventDefault();
@@ -73,7 +73,7 @@
       />
     </label>
     <label>
-      <span>ÐŸÐ°Ñ€Ð¾Ð»ÑŒ</span>
+      <span>Пароль</span>
       <input
         class="input"
         type="password"
@@ -89,7 +89,7 @@
     {/if}
     {#if needsVerification}
       <div class="alert alert-warn" role="alert">
-        <p>Email Ð½Ðµ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´Ñ‘Ð½. ÐžÑ‚ÐºÑ€Ð¾Ð¹Ñ‚Ðµ Ð¿Ð¸ÑÑŒÐ¼Ð¾ ÑÐ¾ ÑÑÑ‹Ð»ÐºÐ¸ Ð¸Ð»Ð¸ Ð·Ð°Ð¿Ñ€Ð¾ÑÐ¸Ñ‚Ðµ Ð½Ð¾Ð²Ð¾Ðµ.</p>
+        <p>Email не подтверждён. Откройте письмо со ссылки или запросите новое.</p>
         <button
           type="button"
           class="btn btn-ghost btn-sm"
@@ -97,21 +97,21 @@
           disabled={resending || resendDone}
         >
           {#if resendDone}
-            ÐŸÐ¸ÑÑŒÐ¼Ð¾ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¾
+            Письмо отправлено
           {:else if resending}
-            Otpravlyaem...
+            Отправляем...
           {:else}
-            Pereotpravit' pismo
+            Отправить повторно
           {/if}
         </button>
       </div>
     {/if}
     <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-      {submitting ? 'Ð’Ñ…Ð¾Ð´Ð¸Ð½...' : 'Ð’Ð¾Ð¹Ñ‚Ð¸'}
+      {submitting ? 'Входим...' : 'Войти'}
     </button>
   </form>
   <p class="footer-link"><a href="/forgot-password">Забыли пароль?</a></p>
-  <p class="footer-link">ÐÐµÑ‚ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚Ð°? <a href="/register">Ð ÐµÐ³Ð¸ÑÑ‚Ñ€Ð°Ñ†Ð¸Ñ</a></p>
+  <p class="footer-link">Нет аккаунта? <a href="/register">Регистрация</a></p>
 </div>
 
 <style>
