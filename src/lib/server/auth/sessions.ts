@@ -1,24 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import { db } from '../db';
-import { organizations, sessions, users } from '../schema';
+import { sessions, users } from '../schema';
 
 export const COOKIE_NAME = 'tagcloud_session';
 export const SESSION_TTL_DAYS = 30;
 
 export type AuthUser = { id: string; email: string };
 
-/**
- * Расширенный профиль из сессии. Грузится из БД на каждый запрос —
- * включает роль и контекст организации (нужно для requireAdmin и для
- * условного показа UI-элементов).
- */
 export type AuthUserExt = {
   id: string;
   email: string;
   role: 'admin' | 'user';
-  organizationId: string;
-  organizationName: string;
 };
 
 function generateSessionId(): string {
@@ -40,13 +33,10 @@ export async function getSessionUser(
     .select({
       id: users.id,
       email: users.email,
-      role: users.role,
-      organizationId: users.organizationId,
-      organizationName: organizations.name
+      role: users.role
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .innerJoin(organizations, eq(users.organizationId, organizations.id))
     .where(
       and(eq(sessions.id, sessionId), gt(sessions.expiresAt, new Date()), isNull(users.deletedAt))
     )
