@@ -14,7 +14,7 @@ import type { AuthUserExt } from './sessions';
  * Использовать в +server.ts admin-роутов и /admin/+layout.server.ts:
  *
  *   const admin = requireAdmin(locals.user);
- *   // admin.organizationId — гарантирован, admin.role === 'admin'
+ *   // admin.role === 'admin', admin.id / admin.email доступны
  */
 export function requireAdmin(user: AuthUserExt | null): AuthUserExt {
   if (!user) {

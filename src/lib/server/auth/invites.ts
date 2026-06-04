@@ -1,6 +1,6 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { db } from '../db';
-import { organizationInvites, users } from '../schema';
+import { organizationInvites, pendingAdminHandover, users } from '../schema';
 
 export type AddInviteResult = 'added' | 'already_exists' | 'already_member';
 
@@ -142,4 +142,96 @@ export async function removeMember(params: {
   }
 
   return 'ok';
+}
+
+
+// --- Admin count -----------------------------------------------------------
+
+export async function countAdmins(): Promise<number> {
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, 'admin'), isNull(users.deletedAt)));
+  return rows.length;
+}
+
+// --- Change admin email (Req 4b) -------------------------------------------
+
+export type ChangeEmailResult = 'ok' | 'email_taken' | 'not_found';
+
+export async function changeAdminEmail(params: {
+  userId: string;
+  newEmail: string;
+}): Promise<ChangeEmailResult> {
+  const [taken] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.email, params.newEmail), ne(users.id, params.userId)))
+    .limit(1);
+  if (taken) return 'email_taken';
+
+  const updated = await db
+    .update(users)
+    .set({ email: params.newEmail })
+    .where(and(eq(users.id, params.userId), isNull(users.deletedAt)))
+    .returning({ id: users.id });
+
+  return updated.length > 0 ? 'ok' : 'not_found';
+}
+
+// --- Admin handover (Req 2) ------------------------------------------------
+//
+// The outgoing admin is removed ONLY after the incoming admin activates
+// (sets their password). createAdminHandover records the intent; complete
+// AdminHandoverFor is called from the password-reset consume path.
+
+export async function createAdminHandover(params: {
+  incomingUserId: string;
+  outgoingUserId: string;
+  keepOutgoingData: boolean;
+}): Promise<void> {
+  await db
+    .insert(pendingAdminHandover)
+    .values({
+      incomingUserId: params.incomingUserId,
+      outgoingUserId: params.outgoingUserId,
+      keepOutgoingData: params.keepOutgoingData
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * If the given (now-activated) user is the incoming side of a pending
+ * handover, finalise it: remove the outgoing admin, then delete the handover
+ * record. Returns the outgoing user id if a handover was completed.
+ *
+ * Runs in a transaction so we never delete the outgoing admin without also
+ * clearing the handover row (which would otherwise re-trigger).
+ */
+export async function completeAdminHandoverFor(incomingUserId: string): Promise<string | null> {
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: pendingAdminHandover.id,
+        outgoingUserId: pendingAdminHandover.outgoingUserId,
+        keepOutgoingData: pendingAdminHandover.keepOutgoingData
+      })
+      .from(pendingAdminHandover)
+      .where(eq(pendingAdminHandover.incomingUserId, incomingUserId))
+      .limit(1);
+
+    if (!row) return null;
+
+    if (row.keepOutgoingData) {
+      await tx
+        .update(users)
+        .set({ deletedAt: new Date() })
+        .where(eq(users.id, row.outgoingUserId));
+    } else {
+      await tx.delete(users).where(eq(users.id, row.outgoingUserId));
+    }
+
+    await tx.delete(pendingAdminHandover).where(eq(pendingAdminHandover.id, row.id));
+    return row.outgoingUserId;
+  });
 }

@@ -1,9 +1,19 @@
 import { requireAdmin } from '$lib/server/auth/access';
-import { listMembers } from '$lib/server/auth/invites';
+import { listMembers, listInvites, countAdmins } from '$lib/server/auth/invites';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-  requireAdmin(locals.user);
-  const members = await listMembers();
-  return { members, currentUserId: locals.user!.id };
+  const admin = requireAdmin(locals.user);
+  const [members, invites, adminCount] = await Promise.all([
+    listMembers(),
+    listInvites(),
+    countAdmins()
+  ]);
+  return {
+    members,
+    invites,
+    adminCount,
+    currentUserId: admin.id,
+    currentUserEmail: admin.email
+  };
 };

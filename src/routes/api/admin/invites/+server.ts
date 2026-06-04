@@ -5,6 +5,7 @@ import { addInvite, listInvites } from '$lib/server/auth/invites';
 import { InviteEmailSchema } from '$lib/server/auth/validation';
 import { sendInvitationEmail } from '$lib/server/email/invitation';
 import { log } from '$lib/server/log';
+import { resolvePublicBaseUrl } from '$lib/server/net/base-url';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, url, locals }) => {
@@ -33,7 +34,7 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   const created = result === 'added';
 
   if (created) {
-    const baseUrl = env.PUBLIC_BASE_URL || env.ORIGIN || url.origin;
+    const baseUrl = resolvePublicBaseUrl(url.origin);
     const organizationName = env.APP_NAME || 'Облако тегов 2090';
     const inviteUrl = `${baseUrl}/register?org=${encodeURIComponent(organizationName)}&email=${encodeURIComponent(parsed.data.email)}`;
     try {

@@ -2,11 +2,19 @@
  * CLI script to create the first admin account.
  *
  * Usage:
- *   DATABASE_URL="postgres://..." npx tsx scripts/create-admin.ts --email admin@example.com
+ *   ADMIN_CREATION_TOKEN="<token>" DATABASE_URL="postgres://..." \
+ *     npx tsx scripts/create-admin.ts --email admin@example.com --baseUrl https://your.host
  *
- * The script creates the account with a random temporary password
- * and prints a password-set link to stdout.
- * The admin must open that link to set their password before logging in.
+ * Security (Req 1):
+ *   - ADMIN_CREATION_TOKEN must be set and must equal the server-configured
+ *     ADMIN_CREATION_TOKEN_EXPECTED (or be passed as --expectedToken). This
+ *     stops anyone with mere DATABASE_URL access from minting an admin.
+ *   - The system is designed for a SINGLE admin. If an admin already exists,
+ *     the script refuses unless --force is passed (administration should be
+ *     transferred from the UI, not bootstrapped again).
+ *
+ * The script creates the account with a random temporary password and prints
+ * a password-set link to stdout; the admin opens it to set their password.
  */
 
 import { parseArgs } from 'node:util';
@@ -15,12 +23,14 @@ import postgres from 'postgres';
 import { hashPassword } from '../src/lib/server/auth/hash';
 import { users, passwordResetTokens } from '../src/lib/server/schema';
 import { and, eq, isNull } from 'drizzle-orm';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 const { values: args } = parseArgs({
   options: {
     email: { type: 'string' },
-    baseUrl: { type: 'string', default: 'http://localhost:3000' }
+    baseUrl: { type: 'string', default: 'http://localhost:3000' },
+    expectedToken: { type: 'string' },
+    force: { type: 'boolean', default: false }
   }
 });
 
@@ -35,6 +45,30 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+// --- Req 1: gate admin creation behind ADMIN_CREATION_TOKEN ---------------
+const providedToken = process.env.ADMIN_CREATION_TOKEN;
+const expectedToken = args.expectedToken ?? process.env.ADMIN_CREATION_TOKEN_EXPECTED;
+if (!providedToken) {
+  console.error('Error: ADMIN_CREATION_TOKEN environment variable is not set');
+  process.exit(1);
+}
+if (!expectedToken) {
+  console.error(
+    'Error: no expected token configured. Set ADMIN_CREATION_TOKEN_EXPECTED ' +
+      '(server-side) or pass --expectedToken so the provided token can be verified.'
+  );
+  process.exit(1);
+}
+{
+  const a = Buffer.from(providedToken);
+  const b = Buffer.from(expectedToken);
+  const equal = a.length === b.length && timingSafeEqual(a, b);
+  if (!equal) {
+    console.error('Error: ADMIN_CREATION_TOKEN does not match the expected token');
+    process.exit(1);
+  }
+}
+
 const email = args.email.trim().toLowerCase();
 const baseUrl = (args.baseUrl ?? 'http://localhost:3000').replace(/\/$/, '');
 
@@ -42,6 +76,21 @@ const sql = postgres(databaseUrl);
 const db = drizzle(sql);
 
 try {
+  // Req 1/3: the system is designed for a single admin. Refuse to bootstrap
+  // another one unless explicitly forced — administration should be handed
+  // over from the UI, which removes the outgoing admin.
+  const existingAdmins = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, 'admin'), isNull(users.deletedAt)));
+  if (existingAdmins.length > 0 && !args.force) {
+    console.error(
+      `\nAn admin already exists (${existingAdmins.length}). Refusing to create another.\n` +
+        'Transfer administration from the admin UI instead, or pass --force to override.'
+    );
+    process.exit(1);
+  }
+
   // Check if user already exists
   const [existing] = await db
     .select({ id: users.id, role: users.role })

@@ -10,7 +10,8 @@ import {
   createPasswordResetToken,
   type PasswordResetToken
 } from './password-reset';
-import { isAllowlisted } from './invites';
+import { isAllowlisted, completeAdminHandoverFor } from './invites';
+import { log } from '../log';
 import type { RegisterInput, ForgotPassword, LoginInput } from './validation';
 
 function isEmailVerificationDisabled(): boolean {
@@ -218,6 +219,26 @@ export async function consumePasswordReset(input: {
 
   if (!u) {
     return { ok: false, code: 'invalid', message: 'Пользователь не найден' };
+  }
+
+  // Req 2: if this user is the incoming side of an admin handover, the act of
+  // setting their password is the activation signal — now (and only now) we
+  // remove the outgoing admin. Done after the password is committed so a
+  // failed/abandoned invite never leaves the system without an admin.
+  try {
+    const removedOutgoing = await completeAdminHandoverFor(consumed.userId);
+    if (removedOutgoing) {
+      log.info('admin_handover_completed', {
+        incomingUserId: consumed.userId,
+        outgoingUserId: removedOutgoing
+      });
+    }
+  } catch (err) {
+    // Never block the user's own activation on a handover-cleanup failure.
+    log.error('admin_handover_completion_failed', {
+      incomingUserId: consumed.userId,
+      err: err instanceof Error ? err.message : String(err)
+    });
   }
 
   const { id: sessionId, expiresAt } = await createSession(u.id);
