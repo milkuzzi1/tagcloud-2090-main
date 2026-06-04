@@ -97,6 +97,24 @@ export const organizationInvites = pgTable(
 })
 );
 
+export const pendingAdminHandover = pgTable(
+'pending_admin_handover',
+{
+  id: uuid('id').defaultRandom().primaryKey(),
+  incomingUserId: uuid('incoming_user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  outgoingUserId: uuid('outgoing_user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  keepOutgoingData: boolean('keep_outgoing_data').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+},
+(t) => ({
+  incomingIdx: uniqueIndex('pending_handover_incoming_idx').on(t.incomingUserId)
+})
+);
+
 export const surveys = pgTable(
 'surveys',
 {

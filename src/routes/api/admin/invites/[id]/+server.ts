@@ -6,16 +6,11 @@ import type { RequestHandler } from './$types';
 /**
  * DELETE /api/admin/invites/:id
  *
- * Убирает email из allowlist организации текущего админа. Если запись
- * принадлежит другой организации — removeInvite не найдёт её и вернёт
- * false (404) — это и есть защита от cross-org удаления.
+ * Убирает email из allowlist. Если записи нет — 404.
  */
 export const DELETE: RequestHandler = async ({ params, locals }) => {
-  const admin = requireAdmin(locals.user);
-  const removed = await removeInvite({
-    organizationId: admin.organizationId,
-    inviteId: params.id
-  });
+  requireAdmin(locals.user);
+  const removed = await removeInvite({ inviteId: params.id });
   if (!removed) {
     return json(
       { error: { code: 'not_found', message: 'Приглашение не найдено' } },

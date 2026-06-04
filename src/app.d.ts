@@ -12,8 +12,6 @@ namespace App {
       id: string;
       email: string;
       role: 'admin' | 'user';
-      organizationId: string;
-      organizationName: string;
     } | null;
     // Реальный IP клиента, выставленный в hooks.server.ts через
     // `getClientIpFromKitEvent`. Доверяет XFF только когда socket-peer входит
