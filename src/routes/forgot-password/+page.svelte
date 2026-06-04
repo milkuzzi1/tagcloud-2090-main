@@ -30,13 +30,13 @@
   }
 </script>
 
-<svelte:head><title>Восстановление пароль облако тегов 2090</title></svelte:head>
+<svelte:head><title>Восстановление пароля — Облако тегов 2090</title></svelte:head>
 
 <div class="auth">
   {#if sent}
     <h1>Проверьте почту</h1>
     <p>
-      Esli takoj adres est' v sisteme, my otpravili ssylku dlya sbrosa paroly na <b>{email}</b>.
+      Если такой адрес есть в системе, мы отправили ссылку для сброса пароля на <b>{email}</b>.
     </p>
     {#if ttlHours}
       <p class="muted">Ссылка действует {ttlHours} ч.</p>
@@ -66,7 +66,7 @@
         <div class="alert alert-error">{errorMessage}</div>
       {/if}
       <button type="submit" class="btn btn-primary btn-block" disabled={submitting}>
-        {submitting ? 'Otpravlyaem...' : 'Отправить ссылку'}
+        {submitting ? 'Отправляем...' : 'Отправить ссылку'}
       </button>
     </form>
     <p class="footer-link"><a href="/login">Вспомнил пароль</a></p>
