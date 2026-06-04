@@ -107,6 +107,42 @@
     }
   }
 
+  // --- Edit a user's email (admin authority) ---
+  let editingId = $state<string | null>(null);
+  let editEmailValue = $state('');
+  let editBusy = $state(false);
+  let editError = $state<string | null>(null);
+
+  function openEditEmail(id: string, currentEmail: string) {
+    editingId = id;
+    editEmailValue = currentEmail;
+    editError = null;
+  }
+
+  async function confirmEditEmail() {
+    if (!editingId) return;
+    editBusy = true;
+    editError = null;
+    try {
+      const r = await fetch(`/api/admin/users/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: editEmailValue })
+      });
+      const body = await r.json();
+      if (!r.ok) {
+        editError = body.error?.message ?? 'Ошибка';
+        return;
+      }
+      members = members.map((m) => (m.id === editingId ? { ...m, email: body.email } : m));
+      editingId = null;
+    } catch {
+      editError = 'Сетевая ошибка';
+    } finally {
+      editBusy = false;
+    }
+  }
+
   // --- Remove member (Req 6) ---
   let removingId = $state<string | null>(null);
   let keepData = $state(true);
@@ -152,8 +188,6 @@
 <svelte:head><title>Администратор — Облако тегов 2090</title></svelte:head>
 
 <div class="page">
-  <h1>Администратор</h1>
-
   <!-- Allowlist: add users allowed into the system (Req 4a / Req 5) -->
   <section>
     <h2>Доступ пользователей</h2>
@@ -184,6 +218,7 @@
             {:else}
               <span class="badge badge-muted">ожидает</span>
             {/if}
+            <button class="btn btn-sm" onclick={() => openEditEmail(m.id, m.email)}>Изменить email</button>
             <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
           </li>
         {/each}
@@ -237,6 +272,48 @@
   </section>
 </div>
 
+<!-- Edit user email modal -->
+{#if editingId}
+  {@const target = members.find((m) => m.id === editingId)}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={() => (editingId = null)}
+    onkeydown={(e) => { if (e.key === 'Escape') editingId = null; }}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-email-title"
+      tabindex="-1"
+      use:autofocus
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
+      <h2 id="edit-email-title">Изменить email пользователя</h2>
+      {#if target}<p class="hint muted">Текущий: {target.email}</p>{/if}
+      <form onsubmit={(e) => { e.preventDefault(); confirmEditEmail(); }}>
+        <input
+          class="input"
+          type="email"
+          bind:value={editEmailValue}
+          required
+          maxlength="254"
+          aria-label="Новый email пользователя"
+        />
+        {#if editError}<p class="error">{editError}</p>{/if}
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick={() => (editingId = null)}>Отмена</button>
+          <button type="submit" class="btn btn-primary" disabled={editBusy}>
+            {editBusy ? 'Сохраняем…' : 'Сохранить'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
 <!-- Remove modal (Req 6) -->
 {#if removingId}
   {@const target = members.find((m) => m.id === removingId)}
@@ -278,7 +355,6 @@
 
 <style>
   .page { max-width: 680px; margin: 0 auto; }
-  h1 { margin-bottom: var(--space-6); }
   section { margin-bottom: var(--space-8); }
   h2 { margin-bottom: var(--space-3); }
   form { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
@@ -290,7 +366,6 @@
   .note { font-size: 0.85rem; }
   .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
   .badge-muted { background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); }
-  .badge-you { background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); }
   .btn-sm { padding: 2px 10px; font-size: 0.8rem; }
   .success { color: var(--c-success); margin-top: var(--space-2); }
   .error { color: var(--c-danger); margin-top: var(--space-2); }
