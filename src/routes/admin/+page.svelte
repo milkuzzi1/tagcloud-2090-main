@@ -3,20 +3,17 @@
 
   let { data }: { data: PageData } = $props();
 
-  // Initial values seeded from the load() data. These lists are then mutated
-  // locally for optimistic UI (add/remove invite, remove member, email change),
-  // so they are $state, not $derived. Reading the props once here is
-  // intentional (snapshot), hence the indirection to avoid the
-  // state_referenced_locally hint.
+  // Initial values seeded from the load() data. The members list is mutated
+  // locally for optimistic UI (remove member, email change), so it is $state,
+  // not $derived. Reading the props once here is intentional (snapshot), hence
+  // the indirection to avoid the state_referenced_locally hint.
   const initial = data;
 
   // --- Members ---
   let members = $state(initial.members);
-  let admins = $derived(members.filter((m) => m.role === 'admin'));
   let users = $derived(members.filter((m) => m.role !== 'admin'));
 
   // --- Allowlist invites (Req 4a / Req 5) ---
-  let invites = $state(initial.invites);
   let inviteEmail = $state('');
   let inviteNote = $state('');
   let invitingBusy = $state(false);
@@ -41,19 +38,11 @@
       inviteMsg = body.sent
         ? `Приглашение отправлено на ${inviteEmail}`
         : `${inviteEmail} уже в списке`;
-      if (body.invite) {
-        invites = [...invites.filter((i) => i.email !== body.invite.email), body.invite];
-      }
       inviteEmail = '';
       inviteNote = '';
     } finally {
       invitingBusy = false;
     }
-  }
-
-  async function removeInvite(id: string, email: string) {
-    const r = await fetch(`/api/admin/invites/${id}`, { method: 'DELETE' });
-    if (r.ok) invites = invites.filter((i) => i.email !== email);
   }
 
   // --- Change admin email (Req 4b) ---
@@ -166,10 +155,6 @@
   <!-- Allowlist: add users allowed into the system (Req 4a / Req 5) -->
   <section>
     <h2>Доступ пользователей</h2>
-    <p class="muted">
-      Добавьте email — пользователю придёт приглашение со ссылкой, по которой он
-      задаёт только пароль. Публичной регистрации нет.
-    </p>
     <form onsubmit={(e) => { e.preventDefault(); addInvite(); }}>
       <input class="input" type="email" bind:value={inviteEmail} placeholder="user@example.com" required maxlength="254" aria-label="Email пользователя" />
       <input class="input input-note" type="text" bind:value={inviteNote} placeholder="заметка (необязательно)" maxlength="200" aria-label="Заметка" />
@@ -179,23 +164,6 @@
     </form>
     {#if inviteMsg}<p class="success">{inviteMsg}</p>{/if}
     {#if inviteError}<p class="error">{inviteError}</p>{/if}
-
-    {#if invites.length > 0}
-      <ul class="list">
-        {#each invites as inv (inv.email)}
-          <li>
-            <span class="email">{inv.email}</span>
-            {#if inv.note}<span class="note muted">{inv.note}</span>{/if}
-            {#if inv.registered}
-              <span class="badge badge-muted">зарегистрирован</span>
-            {:else}
-              <span class="badge badge-muted">ожидает</span>
-            {/if}
-            <button class="btn btn-sm btn-danger" onclick={() => removeInvite(inv.id, inv.email)}>Убрать</button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
   </section>
 
   <!-- Users list (Req 6: remove with keep-data choice) -->
@@ -208,7 +176,12 @@
         {#each users as m (m.id)}
           <li>
             <span class="email">{m.email}</span>
-            {#if !m.emailVerified}<span class="badge badge-muted">не подтверждён</span>{/if}
+            {#if m.note}<span class="note muted">{m.note}</span>{/if}
+            {#if m.emailVerified}
+              <span class="badge badge-muted">зарегистрирован</span>
+            {:else}
+              <span class="badge badge-muted">ожидает</span>
+            {/if}
             <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
           </li>
         {/each}
@@ -218,12 +191,11 @@
 
   <!-- Change admin email (Req 4b) -->
   <section>
-    <h2>Email администратора</h2>
-    <p class="muted">Смена email вашей учётной записи. Требуется текущий пароль.</p>
+    <h2>Изменить email</h2>
     <form onsubmit={(e) => { e.preventDefault(); changeEmail(); }}>
       <input class="input" type="email" bind:value={newEmail} required maxlength="254" aria-label="Новый email" />
       <input class="input" type="password" bind:value={currentPassword} placeholder="текущий пароль" required autocomplete="current-password" aria-label="Текущий пароль" />
-      <button type="submit" class="btn" disabled={emailBusy}>
+      <button type="submit" class="btn btn-primary" disabled={emailBusy}>
         {emailBusy ? 'Сохраняем…' : 'Изменить email'}
       </button>
     </form>
@@ -233,16 +205,7 @@
 
   <!-- Transfer administration (Req 2 + Req 3) -->
   <section>
-    <h2>Администраторы</h2>
-    <ul class="list">
-      {#each admins as m (m.id)}
-        <li>
-          <span class="email">{m.email}</span>
-          {#if !m.emailVerified}<span class="badge badge-muted">не активирован</span>{/if}
-          {#if m.id === data.currentUserId}<span class="badge badge-you">вы</span>{/if}
-        </li>
-      {/each}
-    </ul>
+    <h2>Передать администрирование</h2>
 
     {#if canTransfer}
       <p class="muted">
