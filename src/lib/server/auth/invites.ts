@@ -18,13 +18,14 @@ export type MemberRow = {
   role: string;
   note: string | null;
   createdAt: Date;
+  emailVerified: boolean;
 };
 
 export type RemoveMemberResult = 'ok' | 'self_removal' | 'last_admin' | 'not_found';
 
 /**
- * Добавляет email в аллоулист.
- * Если email уже зарегистрирован среди возвращает 'already_member'.
+ * \u0414\u043e\u0431\u0430\u0432\u043b\u044f\u0435\u0442 email \u0432 \u0430\u043b\u043b\u043e\u0443\u043b\u0438\u0441\u0442.
+ * \u0415\u0441\u043b\u0438 email \u0443\u0436\u0435 \u0437\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u043e\u0432\u0430\u043d \u0441\u0440\u0435\u0434\u0438 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 'already_member'.
  */
 export async function addInvite(params: {
   email: string;
@@ -100,7 +101,8 @@ export async function listMembers(): Promise<MemberRow[]> {
       email: users.email,
       role: users.role,
       note: organizationInvites.note,
-      createdAt: users.createdAt
+      createdAt: users.createdAt,
+      emailVerified: users.emailVerified
     })
     .from(users)
     .leftJoin(organizationInvites, eq(organizationInvites.email, users.email))
