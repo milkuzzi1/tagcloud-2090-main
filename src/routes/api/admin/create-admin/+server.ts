@@ -12,8 +12,6 @@ const Body = z.object({
   email: z.string().trim().toLowerCase().email().max(254)
 });
 
-// Create a new admin account and send a password-set link.
-// Only existing admins can call this.
 export const POST: RequestHandler = async ({ request, url, locals }) => {
   requireAdmin(locals.user);
 
@@ -23,8 +21,6 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     return json({ error: { code: 'invalid_input', issues: parsed.error.issues } }, { status: 400 });
   }
 
-  // Generate a random temporary password -- the user will never see it;
-  // they set their real password via the reset link.
   const tmpPassword = crypto.randomUUID();
   const result = await registerAdmin({ email: parsed.data.email, password: tmpPassword });
 
@@ -32,16 +28,17 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     return json({ error: { code: result.code, message: result.message } }, { status: 409 });
   }
 
-  // Create a password-reset token so the new admin can set their password.
   const token = await createPasswordResetToken(result.user.id);
   const baseUrl = env.PUBLIC_BASE_URL || env.ORIGIN || url.origin;
   const setPasswordUrl = `${baseUrl}/reset-password?t=${token.token}`;
+  const organizationName = env.APP_NAME || '\u041e\u0431\u043b\u0430\u043a\u043e \u0442\u0435\u0433\u043e\u0432 2090';
 
   try {
     await sendPasswordResetEmail({
       to: result.user.email,
       resetUrl: setPasswordUrl,
-      ttlHours: PASSWORD_RESET_TTL_HOURS
+      ttlHours: PASSWORD_RESET_TTL_HOURS,
+      organizationName
     });
   } catch (err) {
     log.error('create_admin_send_failed', {
