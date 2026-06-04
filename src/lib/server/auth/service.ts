@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '../db';
 import { sessions, users } from '../schema';
@@ -138,7 +138,86 @@ export async function registerAdmin(input: RegisterInput): Promise<RegisterResul
   }
 }
 
+export type PromoteAdminResult =
+  | {
+      ok: true;
+      // 'promoted'  — existing live user upgraded to admin in place;
+      // 'created'   — brand-new admin row was inserted.
+      action: 'promoted' | 'created';
+      user: { id: string; email: string };
+      // True if the user already has a password (no set-password email needed).
+      hasPassword: boolean;
+    }
+  | { ok: false; code: string; message: string };
+
+/**
+ * Promote an existing live user with this email to admin, OR create a new admin
+ * if none exists. Variant (A): we upgrade the existing account in place instead
+ * of creating a second row for the same email (which previously produced
+ * duplicate accounts and a non-deterministic login).
+ */
+export async function promoteOrCreateAdmin(email: string): Promise<PromoteAdminResult> {
+  const [existing] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      passwordHash: users.passwordHash
+    })
+    .from(users)
+    .where(and(eq(users.email, email), isNull(users.deletedAt)))
+    .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.createdAt)
+    .limit(1);
+
+  if (existing) {
+    if (existing.role !== 'admin') {
+      await db.update(users).set({ role: 'admin' }).where(eq(users.id, existing.id));
+    }
+    return {
+      ok: true,
+      action: 'promoted',
+      user: { id: existing.id, email: existing.email },
+      hasPassword: existing.passwordHash !== null
+    };
+  }
+
+  // No live user — create a fresh admin (password set later via the link).
+  const tmpPasswordHash = await hashPassword(crypto.randomUUID());
+  const autoVerify = isEmailVerificationDisabled();
+  try {
+    const [created] = await db
+      .insert(users)
+      .values({
+        email,
+        passwordHash: tmpPasswordHash,
+        role: 'admin',
+        emailVerified: autoVerify,
+        emailVerifiedAt: autoVerify ? new Date() : null
+      })
+      .returning({ id: users.id });
+    return {
+      ok: true,
+      action: 'created',
+      user: { id: created.id, email },
+      // Freshly created admins always need to set a real password via the link.
+      hasPassword: false
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('unique') || msg.includes('users_email')) {
+      return { ok: false, code: 'email_taken', message: 'Email уже зарегистрирован' };
+    }
+    throw err;
+  }
+}
+
 export async function login(input: LoginInput): Promise<LoginResult> {
+  // Deterministic lookup: historically users.email had no global unique
+  // constraint (it was org-scoped, then the org column was dropped), so the DB
+  // can briefly contain more than one live row per email. Prefer an admin row,
+  // then the earliest-created one, so login never resolves to an arbitrary row
+  // and an admin can always sign in. A migration also restores a partial
+  // unique index on (email) WHERE deleted_at IS NULL to prevent new duplicates.
   const [u] = await db
     .select({
       id: users.id,
@@ -148,6 +227,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     })
     .from(users)
     .where(and(eq(users.email, input.email), isNull(users.deletedAt)))
+    .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.createdAt)
     .limit(1);
 
   const hashToCheck = u?.passwordHash ?? (await getDummyPasswordHash());

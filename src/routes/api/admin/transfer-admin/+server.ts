@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
 import { requireAdmin } from '$lib/server/auth/access';
-import { registerAdmin } from '$lib/server/auth/service';
-import { countAdmins, createAdminHandover } from '$lib/server/auth/invites';
+import { promoteOrCreateAdmin } from '$lib/server/auth/service';
+import { countAdmins, createAdminHandover, completeAdminHandoverFor } from '$lib/server/auth/invites';
 import { createPasswordResetToken, PASSWORD_RESET_TTL_HOURS } from '$lib/server/auth/password-reset';
 import { sendPasswordResetEmail } from '$lib/server/email/password-reset';
 import { log } from '$lib/server/log';
@@ -19,14 +19,25 @@ const Body = z.object({
 /**
  * POST /api/admin/transfer-admin  (Req 2 + Req 3)
  *
- * The current admin hands administration to a new admin identified by email.
- * A new admin account is created in a pending state and emailed a link to set
- * their password. The current admin is removed ONLY after the new admin
- * activates (see consumePasswordReset -> completeAdminHandoverFor).
+ * The current (sole) admin hands administration to another person identified
+ * by email.
  *
- * Guard: this is only allowed while the caller is the SOLE admin. That makes
- * the operation a true one-time handover and enforces Req 3 (a non-sole admin
- * — i.e. the post-handover admin — can never mint additional admins).
+ * Variant (A): if a live user with that email already exists, we PROMOTE that
+ * existing account to admin in place — we do not create a second row for the
+ * same email (which previously caused duplicate accounts and a
+ * non-deterministic login).
+ *
+ * Outgoing-admin removal:
+ *   - if the incoming person already has a password (existing active user),
+ *     the handover completes IMMEDIATELY — they can already sign in, so the
+ *     outgoing admin is removed right away (no email needed);
+ *   - otherwise (new account, or invited user who never set a password) the
+ *     outgoing admin is removed only AFTER the incoming person sets their
+ *     password via the emailed link (consumePasswordReset ->
+ *     completeAdminHandoverFor), so a failed/abandoned invite never leaves the
+ *     system without an admin.
+ *
+ * Guard: only the SOLE admin may transfer (enforces Req 3).
  */
 export const POST: RequestHandler = async ({ request, url, locals }) => {
   const admin = requireAdmin(locals.user);
@@ -57,12 +68,38 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     );
   }
 
-  const tmpPassword = crypto.randomUUID();
-  const result = await registerAdmin({ email: parsed.data.email, password: tmpPassword });
+  const result = await promoteOrCreateAdmin(parsed.data.email);
   if (!result.ok) {
     return json({ error: { code: result.code, message: result.message } }, { status: 409 });
   }
 
+  // Case 1: the incoming person can already sign in — complete the handover now.
+  if (result.hasPassword) {
+    await createAdminHandover({
+      incomingUserId: result.user.id,
+      outgoingUserId: admin.id,
+      keepOutgoingData: parsed.data.keepData
+    });
+    const removed = await completeAdminHandoverFor(result.user.id);
+    log.info('transfer_admin_completed_immediately', {
+      incomingUserId: result.user.id,
+      incomingEmail: result.user.email,
+      outgoingUserId: admin.id,
+      removed
+    });
+    return json(
+      {
+        ok: true,
+        email: result.user.email,
+        action: result.action,
+        completed: true,
+        message: 'Администрирование передано. Ваш аккаунт удалён.'
+      },
+      { status: 200 }
+    );
+  }
+
+  // Case 2: incoming person must set a password first — defer removal.
   await createAdminHandover({
     incomingUserId: result.user.id,
     outgoingUserId: admin.id,
@@ -90,11 +127,12 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   log.info('transfer_admin_initiated', {
     incomingUserId: result.user.id,
     incomingEmail: result.user.email,
-    outgoingUserId: admin.id
+    outgoingUserId: admin.id,
+    action: result.action
   });
 
   return json(
-    { ok: true, email: result.user.email, ttlHours: PASSWORD_RESET_TTL_HOURS },
+    { ok: true, email: result.user.email, action: result.action, completed: false, ttlHours: PASSWORD_RESET_TTL_HOURS },
     { status: 201 }
   );
 };
