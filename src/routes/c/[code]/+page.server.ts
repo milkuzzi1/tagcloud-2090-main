@@ -39,5 +39,6 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
   );
   const initialWords: Record<string, CloudWord[]> = Object.fromEntries(entries);
 
-  return { survey, initialWords, creatorToken: survey.creatorToken };
+  // Токен не отдаём залогиненному владельцу — клиент идёт по session-cookie.
+  return { survey, initialWords, creatorToken: userId ? undefined : survey.creatorToken };
 };

@@ -17,7 +17,13 @@
   const isChromeless = $derived(page.route.id === '/c/[code]');
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    // Не даём сетевой ошибке оборвать цепочку: даже если запрос упал,
+    // инвалидируем локальное состояние и уводим на главную.
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      /* network error — продолжаем локальный logout */
+    }
     await invalidateAll();
     await goto('/');
   }

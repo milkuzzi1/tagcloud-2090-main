@@ -1,86 +1,102 @@
 <!doctype html>
 <html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Школа №2090 — проекты</title>
+    <meta
+      name="description"
+      content="Цифровые проекты Школы №2090: облако тегов и другие интерактивные инструменты."
+    />
+    <link rel="icon" href="/logo2090.png" type="image/png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
 
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Школа №2090 — проекты</title>
-  <meta name="description" content="Цифровые проекты Школы №2090: облако тегов и другие интерактивные инструменты." />
-  <link rel="icon" href="/logo2090.png" type="image/png" />
-  <link rel="stylesheet" href="styles.css" />
-</head>
+  <body>
+    <a class="skip-link" href="#main">Перейти к содержимому</a>
 
-<body>
-  <a class="skip-link" href="#main">Перейти к содержимому</a>
-
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="Школа №2090">
-      <img class="brand-logo" src="/logo2090.png" alt="" />
-      <span class="brand-text">Школа №2090</span>
-    </a>
-  </header>
-
-  <main id="main" class="container">
-    <section class="hero">
-      <h1>Проекты Школы №2090</h1>
-      <p class="lead">
-        Выберите проект, чтобы перейти к нему.
-      </p>
-    </section>
-
-    <section class="projects" aria-label="Список проектов">
-      <a class="project" href="https://cloud.2090.fun" target="_blank" rel="noopener">
-        <div class="project-icon" aria-hidden="true">
-          <!-- Облако тегов: упрощённое изображение «слов» разного размера. -->
-          <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Облако тегов">
-            <text x="8" y="32" font-size="14" font-family="sans-serif" fill="#0E2A5C">2090</text>
-            <text x="44" y="28" font-size="10" font-family="sans-serif" fill="#2D9FDA">
-              школа
-            </text>
-            <text x="16" y="56" font-size="20" font-family="sans-serif" fill="#0E2A5C" font-weight="700">
-              облако
-            </text>
-            <text x="12" y="80" font-size="11" font-family="sans-serif" fill="#2D9FDA">
-              слова
-            </text>
-            <text x="48" y="80" font-size="14" font-family="sans-serif" fill="#0E2A5C">теги</text>
-          </svg>
-        </div>
-        <div class="project-info">
-          <h2 class="project-title">Облако тегов</h2>
-          <p class="project-desc">
-            Анонимные интерактивные опросы для школьных мероприятий
-          </p>
-          <span class="project-cta">Открыть →</span>
-        </div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Школа №2090">
+        <img class="brand-logo" src="/logo2090.png" alt="" />
+        <span class="brand-text">Школа №2090</span>
       </a>
+    </header>
 
-      <!--
+    <main id="main" class="container">
+      <section class="hero">
+        <h1>Проекты Школы №2090</h1>
+        <p class="lead">Выберите проект, чтобы перейти к нему.</p>
+      </section>
+
+      <section class="projects" aria-label="Список проектов">
+        <a class="project" href="https://cloud.2090.fun" target="_blank" rel="noopener">
+          <div class="project-icon" aria-hidden="true">
+            <!-- Облако тегов: упрощённое изображение «слов» разного размера. -->
+            <svg
+              viewBox="0 0 96 96"
+              xmlns="http://www.w3.org/2000/svg"
+              role="img"
+              aria-label="Облако тегов"
+            >
+              <text x="8" y="32" font-size="14" font-family="sans-serif" fill="#0E2A5C">2090</text>
+              <text x="44" y="28" font-size="10" font-family="sans-serif" fill="#2D9FDA">
+                школа
+              </text>
+              <text
+                x="16"
+                y="56"
+                font-size="20"
+                font-family="sans-serif"
+                fill="#0E2A5C"
+                font-weight="700"
+              >
+                облако
+              </text>
+              <text x="12" y="80" font-size="11" font-family="sans-serif" fill="#2D9FDA">
+                слова
+              </text>
+              <text x="48" y="80" font-size="14" font-family="sans-serif" fill="#0E2A5C">теги</text>
+            </svg>
+          </div>
+          <div class="project-info">
+            <h2 class="project-title">Облако тегов</h2>
+            <p class="project-desc">Анонимные интерактивные опросы для школьных мероприятий</p>
+            <span class="project-cta">Открыть →</span>
+          </div>
+        </a>
+
+        <!--
           Заготовки под будущие проекты Школы. Добавляйте новые карточки
           по тому же шаблону: <a class="project" href="https://...">…</a>.
           Можно дополнительно отметить их атрибутом `data-coming-soon`
           (см. CSS), если ссылки ещё не работают.
         -->
-      <div class="project project-placeholder" aria-label="Скоро">
-        <div class="project-icon" aria-hidden="true">
-          <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="presentation">
-            <rect x="14" y="14" width="68" height="68" rx="12" fill="#F7F8FA" stroke="#E5E7EB" />
-            <text x="48" y="56" font-size="28" font-family="sans-serif" fill="#9CA3AF" text-anchor="middle">
-              +
-            </text>
-          </svg>
+        <div class="project project-placeholder" aria-label="Скоро">
+          <div class="project-icon" aria-hidden="true">
+            <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="presentation">
+              <rect x="14" y="14" width="68" height="68" rx="12" fill="#F7F8FA" stroke="#E5E7EB" />
+              <text
+                x="48"
+                y="56"
+                font-size="28"
+                font-family="sans-serif"
+                fill="#9CA3AF"
+                text-anchor="middle"
+              >
+                +
+              </text>
+            </svg>
+          </div>
+          <div class="project-info">
+            <h2 class="project-title">Скоро</h2>
+            <p class="project-desc">Здесь появятся другие цифровые проекты Школы №2090.</p>
+          </div>
         </div>
-        <div class="project-info">
-          <h2 class="project-title">Скоро</h2>
-          <p class="project-desc">Здесь появятся другие цифровые проекты Школы №2090.</p>
-        </div>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
 
-  <footer class="footer">
-    <span>Школа №2090 · образовательный проект</span>
-  </footer>
-</body>
-
+    <footer class="footer">
+      <span>Школа №2090 · образовательный проект</span>
+    </footer>
+  </body>
 </html>

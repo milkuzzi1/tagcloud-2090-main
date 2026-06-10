@@ -24,3 +24,15 @@ export async function pingRedis(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Корректно закрывает соединение с Redis на graceful shutdown
+ * (см. hooks.server.ts). `quit()` дожидается завершения in-flight команд.
+ */
+export async function disconnectRedis(): Promise<void> {
+  try {
+    await redis.quit();
+  } catch {
+    // Уже закрыт/недоступен — не мешаем завершению процесса.
+  }
+}

@@ -1,6 +1,6 @@
 import { and, eq, isNull, ne } from 'drizzle-orm';
-import { db } from '../db';
-import { organizationInvites, pendingAdminHandover, users } from '../schema';
+import { db, type Executor } from '../db';
+import { organizationInvites, pendingAdminHandover, sessions, users } from '../schema';
 
 export type AddInviteResult = 'added' | 'already_exists' | 'already_member';
 
@@ -49,9 +49,7 @@ export async function addInvite(params: {
   return result.length > 0 ? 'added' : 'already_exists';
 }
 
-export async function removeInvite(params: {
-  inviteId: string;
-}): Promise<boolean> {
+export async function removeInvite(params: { inviteId: string }): Promise<boolean> {
   const result = await db
     .delete(organizationInvites)
     .where(eq(organizationInvites.id, params.inviteId))
@@ -82,9 +80,7 @@ export async function listInvites(): Promise<InviteRow[]> {
   }));
 }
 
-export async function isAllowlisted(params: {
-  email: string;
-}): Promise<boolean> {
+export async function isAllowlisted(params: { email: string }): Promise<boolean> {
   const [row] = await db
     .select({ id: organizationInvites.id })
     .from(organizationInvites)
@@ -133,22 +129,23 @@ export async function removeMember(params: {
   }
 
   if (params.keepData) {
-    await db
-      .update(users)
-      .set({ deletedAt: new Date() })
-      .where(eq(users.id, params.userId));
+    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, params.userId));
   } else {
     await db.delete(users).where(eq(users.id, params.userId));
   }
 
+  // Инвалидируем сессии удаляемого пользователя. При hard-delete FK-cascade
+  // их и так снесёт, но при soft-delete (keepData) строки сессий остаются —
+  // явная чистка не даёт восстановленному аккаунту «ожить» со старой сессией.
+  await db.delete(sessions).where(eq(sessions.userId, params.userId));
+
   return 'ok';
 }
 
-
 // --- Admin count -----------------------------------------------------------
 
-export async function countAdmins(): Promise<number> {
-  const rows = await db
+export async function countAdmins(exec: Executor = db): Promise<number> {
+  const rows = await exec
     .select({ id: users.id })
     .from(users)
     .where(and(eq(users.role, 'admin'), isNull(users.deletedAt)));
@@ -175,11 +172,7 @@ export async function changeUserEmail(params: {
     .select({ id: users.id })
     .from(users)
     .where(
-      and(
-        eq(users.email, params.newEmail),
-        ne(users.id, params.userId),
-        isNull(users.deletedAt)
-      )
+      and(eq(users.email, params.newEmail), ne(users.id, params.userId), isNull(users.deletedAt))
     )
     .limit(1);
   if (taken) return 'email_taken';
@@ -189,6 +182,14 @@ export async function changeUserEmail(params: {
     .set({ email: params.newEmail })
     .where(and(eq(users.id, params.userId), isNull(users.deletedAt)))
     .returning({ id: users.id });
+
+  // Смена email инвалидирует все сессии пользователя: иначе угнанная (или
+  // просто старая, на чужом устройстве) сессия продолжала бы жить после
+  // того, как контактный адрес аккаунта сменился. Тот же паттерн, что при
+  // сбросе пароля (см. auth/service.ts: consumePasswordReset).
+  if (updated.length > 0) {
+    await db.delete(sessions).where(eq(sessions.userId, params.userId));
+  }
 
   return updated.length > 0 ? 'ok' : 'not_found';
 }
@@ -202,12 +203,15 @@ export const changeAdminEmail = changeUserEmail;
 // (sets their password). createAdminHandover records the intent; complete
 // AdminHandoverFor is called from the password-reset consume path.
 
-export async function createAdminHandover(params: {
-  incomingUserId: string;
-  outgoingUserId: string;
-  keepOutgoingData: boolean;
-}): Promise<void> {
-  await db
+export async function createAdminHandover(
+  params: {
+    incomingUserId: string;
+    outgoingUserId: string;
+    keepOutgoingData: boolean;
+  },
+  exec: Executor = db
+): Promise<void> {
+  await exec
     .insert(pendingAdminHandover)
     .values({
       incomingUserId: params.incomingUserId,
@@ -225,30 +229,42 @@ export async function createAdminHandover(params: {
  * Runs in a transaction so we never delete the outgoing admin without also
  * clearing the handover row (which would otherwise re-trigger).
  */
-export async function completeAdminHandoverFor(incomingUserId: string): Promise<string | null> {
-  return await db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({
-        id: pendingAdminHandover.id,
-        outgoingUserId: pendingAdminHandover.outgoingUserId,
-        keepOutgoingData: pendingAdminHandover.keepOutgoingData
-      })
-      .from(pendingAdminHandover)
-      .where(eq(pendingAdminHandover.incomingUserId, incomingUserId))
-      .limit(1);
+async function doCompleteHandover(exec: Executor, incomingUserId: string): Promise<string | null> {
+  const [row] = await exec
+    .select({
+      id: pendingAdminHandover.id,
+      outgoingUserId: pendingAdminHandover.outgoingUserId,
+      keepOutgoingData: pendingAdminHandover.keepOutgoingData
+    })
+    .from(pendingAdminHandover)
+    .where(eq(pendingAdminHandover.incomingUserId, incomingUserId))
+    .limit(1);
 
-    if (!row) return null;
+  if (!row) return null;
 
-    if (row.keepOutgoingData) {
-      await tx
-        .update(users)
-        .set({ deletedAt: new Date() })
-        .where(eq(users.id, row.outgoingUserId));
-    } else {
-      await tx.delete(users).where(eq(users.id, row.outgoingUserId));
-    }
+  if (row.keepOutgoingData) {
+    await exec.update(users).set({ deletedAt: new Date() }).where(eq(users.id, row.outgoingUserId));
+  } else {
+    await exec.delete(users).where(eq(users.id, row.outgoingUserId));
+  }
 
-    await tx.delete(pendingAdminHandover).where(eq(pendingAdminHandover.id, row.id));
-    return row.outgoingUserId;
-  });
+  // Гасим сессии исходящего админа: при soft-delete FK-cascade не сработает,
+  // а getSessionUser хоть и фильтрует deletedAt, явная чистка убирает
+  // «висящие» строки и закрывает возможность повторного входа при
+  // потенциальном восстановлении аккаунта.
+  await exec.delete(sessions).where(eq(sessions.userId, row.outgoingUserId));
+
+  await exec.delete(pendingAdminHandover).where(eq(pendingAdminHandover.id, row.id));
+  return row.outgoingUserId;
+}
+
+export async function completeAdminHandoverFor(
+  incomingUserId: string,
+  exec?: Executor
+): Promise<string | null> {
+  // Если передали транзакцию (например, transfer-admin держит advisory-lock) —
+  // работаем внутри неё. Иначе открываем свою, чтобы delete-outgoing и
+  // delete-pending были атомарны (иначе handover мог бы повторно сработать).
+  if (exec) return doCompleteHandover(exec, incomingUserId);
+  return await db.transaction((tx) => doCompleteHandover(tx, incomingUserId));
 }

@@ -1,28 +1,25 @@
-# Caddyfile для reverse-proxy перед Node-инстансом tagcloud.
+# Caddyfile для tagcloud на ЧИСТОМ СТАТИЧЕСКОМ СЕРВЕРЕ (постоянный публичный IP).
 #
-# Раскладка двух виртхостов:
-#   * `2090.fun`        — статический landing-сайт со списком проектов
-#                         Школы №2090 (раздаётся из /opt/tagcloud/landing).
-#   * `cloud.2090.fun`  — облако тегов (SvelteKit / Node, порт 3000).
+# Два виртхоста:
+#   * 2090.fun         — статический лендинг (раздаётся из /opt/tagcloud/landing).
+#   * cloud.2090.fun   — облако тегов (SvelteKit / Node на 127.0.0.1:3000).
 #
-# Использование:
-#   1. Скопировать в /etc/caddy/Caddyfile (или включить через `import`).
-#   2. Заменить admin@2090.fun на реальный почтовый ящик для ACME.
-#   3. Если боевой сценарий — Cloudflare Tunnel (variant B, см.
-#      deploy/dynamic-ip.md), TLS терминируется на edge Cloudflare,
-#      и Caddy слушает по HTTP без сертификатов (см. блок ниже).
-#   4. systemctl reload caddy.
+# TLS: Caddy сам выпустит и будет продлевать сертификаты Let's Encrypt по
+# HTTP-01 при первом обращении к домену. Условия:
+#   - на сервере постоянный публичный IP;
+#   - A/AAAA-записи 2090.fun, www.2090.fun, cloud.2090.fun указывают на этот IP;
+#   - порты 80 и 443 открыты снаружи (firewall/security group).
 #
-# Caddy автоматически выпустит и обновит TLS-сертификат через Let's Encrypt
-# (HTTP-01) при первом обращении к домену с публичного IP. При Cloudflare
-# Tunnel сертификаты не нужны — раскомментируйте `http://` блоки внизу
-# и закомментируйте боевые TLS-блоки.
+# Установка:
+#   sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
+#   # при необходимости поменяйте домен и e-mail для ACME ниже
+#   sudo systemctl reload caddy
 
 {
-	# Глобальные настройки. ACME email обязателен для production TLS.
+	# E-mail для ACME (Let's Encrypt). Подставьте реальный ящик.
 	email admin@2090.fun
 
-	# Логи в журнал systemd (journalctl -u caddy).
+	# Логи Caddy в journald (journalctl -u caddy).
 	log {
 		output stderr
 		format console
@@ -31,17 +28,14 @@
 }
 
 # ─────────────────────────────────────────────────────────────────────────
-# Landing 2090.fun: статический сайт с проектами Школы №2090
-# (один из проектов — облако тегов на cloud.2090.fun).
+# Лендинг: 2090.fun — статический сайт.
 # ─────────────────────────────────────────────────────────────────────────
 
 2090.fun, www.2090.fun {
-	# Каталог с index.html / styles.css / logo2090.png.
 	root * /opt/tagcloud/landing
 	file_server
 	encode zstd gzip
 
-	# Те же security-заголовки, что у основного приложения.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
@@ -51,120 +45,49 @@
 		-Server
 	}
 
-	# Доп. защита: блокируем доступ к скрытым файлам/директориям, чтобы
-	# случайно положенный .env / .git не утёк.
+	# Не отдаём случайно положенные секреты.
 	@hidden path /.env /.git/* /.DS_Store
 	respond @hidden 404
 }
 
 # ─────────────────────────────────────────────────────────────────────────
-# Облако тегов: cloud.2090.fun → Node (127.0.0.1:3000)
+# Приложение: cloud.2090.fun → Node (127.0.0.1:3000).
 # ─────────────────────────────────────────────────────────────────────────
 
 cloud.2090.fun {
-	# Главное: проксируем всё на Node. Caddy сам апгрейдит ws:// → wss://.
-	#
-	# Для multi-instance (см. deploy/README.md "Профиль multi-instance"):
-	# заменить `127.0.0.1:3000` на список upstream'ов и добавить `lb_policy`.
-	# Пример для 4 инстансов:
-	#   reverse_proxy 127.0.0.1:3001 127.0.0.1:3002 127.0.0.1:3003 127.0.0.1:3004 {
-	#       lb_policy ip_hash         # WS sticky: один IP всегда на один upstream
-	#       health_uri /readyz
-	#       health_interval 5s
-	#       health_timeout 2s
-	#       fail_duration 30s
-	#       …заголовки и transport ниже…
-	#   }
+	# Проксируем всё на Node. WebSocket-апгрейд (ws:// → wss://) работает
+	# из коробки; заголовки X-Forwarded-* нужны, чтобы getClientAddress()
+	# в SvelteKit видел реальный IP клиента (rate-limit, дедуп голосов).
 	reverse_proxy 127.0.0.1:3000 {
-		# WebSocket-апгрейд работает из коробки; явно указываем заголовки,
-		# чтобы getClientAddress() в SvelteKit видел реальный IP клиента.
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto {scheme}
 
-		# Долгоиграющие WS — увеличим read/write таймауты по умолчанию.
+		# Долгоживущие WebSocket — увеличиваем таймауты.
 		transport http {
 			read_timeout 1h
 			write_timeout 1h
 		}
 	}
 
-	# /metrics — только из локалки/мониторинга. Если METRICS_TOKEN задан в
-	# tagcloud.env, бэкенд проверит его сам; этот ACL — второй слой защиты.
+	# /metrics наружу не отдаём (второй слой к METRICS_TOKEN в приложении).
 	@metrics path /metrics
-	@metrics_internal {
-		path /metrics
-		remote_ip 127.0.0.1 ::1 10.0.0.0/8 192.168.0.0/16 172.16.0.0/12
-	}
-	handle @metrics {
-		# По умолчанию — наружу не пускаем. Раскомментируйте `respond 403` ниже
-		# и `handle @metrics_internal` отдельно, если хотите явный allow-list.
-		respond 403
-	}
-	# handle @metrics_internal {
-	# 	reverse_proxy 127.0.0.1:3000
-	# }
+	respond @metrics 403
 
-	# Security-заголовки. Дополняют SvelteKit-CSP (она ставится в HTML-ответе),
-	# здесь лежат HTTP-only заголовки, которые проще централизовать на edge.
+	# HTTP-only security-заголовки (CSP приложение ставит само в HTML-ответе).
 	header {
-		# HSTS на 1 год + preload-кандидат. Включайте preload только когда
-		# уверены, что весь домен и поддомены готовы к HTTPS навсегда.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-
-		# Запрет MIME-sniffing (XSS через картинки/csv).
 		X-Content-Type-Options "nosniff"
-
-		# Запрет встраивания в iframe — у нас нет легитимного use-case'а.
 		X-Frame-Options "DENY"
-
-		# Минимум утечки реферера на внешние ссылки.
 		Referrer-Policy "strict-origin-when-cross-origin"
-
-		# Отключаем мощные браузерные API, которыми проект не пользуется.
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-
-		# Снимаем заголовок Server, чтобы не светить версию Caddy.
 		-Server
 	}
 
-	# Health-checks без логирования (иначе журнал заполняется пробами).
+	# Health-пробы не логируем (иначе журнал заполняется).
 	@healthz path /healthz /readyz
 	log_skip @healthz
 
-	# Доп. защита: запрещаем доступ к чувствительным путям (если кто-то
-	# случайно положит .env / .git в корень).
 	@hidden path /.env /.git/*
 	respond @hidden 404
 }
-
-# ─────────────────────────────────────────────────────────────────────────
-# Cloudflare Tunnel (variant B, dynamic IP):
-# TLS терминируется на edge Cloudflare, Caddy слушает только по HTTP
-# на 127.0.0.1:8080 (cloudflared проксирует туда). Раскомментируйте
-# и удалите TLS-блоки выше, если используете этот сценарий.
-# ─────────────────────────────────────────────────────────────────────────
-#
-# http://2090.fun:8080, http://www.2090.fun:8080 {
-# 	root * /opt/tagcloud/landing
-# 	file_server
-# 	encode zstd gzip
-# }
-#
-# http://cloud.2090.fun:8080 {
-# 	reverse_proxy 127.0.0.1:3000 {
-# 		header_up X-Real-IP {remote_host}
-# 		header_up X-Forwarded-For {remote_host}
-# 		header_up X-Forwarded-Proto {scheme}
-# 		transport http {
-# 			read_timeout 1h
-# 			write_timeout 1h
-# 		}
-# 	}
-# }
-
-# Опционально: HTTP-доступ по IP без TLS — только для разработки/первичной
-# проверки. На production удалите этот блок.
-# :80 {
-# 	reverse_proxy 127.0.0.1:3000
-# }

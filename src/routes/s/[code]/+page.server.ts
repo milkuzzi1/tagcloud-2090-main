@@ -38,13 +38,14 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
     initialWords = Object.fromEntries(entries);
   }
 
-  // creatorToken используется на клиенте для WS upgrade.
-  // При session-доступе тоже отдаём — клиент уже прошёл проверку прав.
+  // creatorToken нужен клиенту для WS/CSV/retry/finish ТОЛЬКО при доступе по
+  // токену. Залогиненному владельцу токен не отдаём — он бы протёк в SSR-HTML,
+  // историю браузера, Referer и логи прокси; клиент использует session-cookie.
   return {
     survey,
     respondentUrl,
     qrPngBase64Data,
-    creatorToken: survey.creatorToken,
+    creatorToken: userId ? undefined : survey.creatorToken,
     initialWords
   };
 };

@@ -69,7 +69,10 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
     .limit(1);
 
   if (!target) {
-    return json({ error: { code: 'not_found', message: 'Пользователь не найден' } }, { status: 404 });
+    return json(
+      { error: { code: 'not_found', message: 'Пользователь не найден' } },
+      { status: 404 }
+    );
   }
   if (target.role === 'admin') {
     return json(
@@ -85,12 +88,18 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 
   const result = await changeUserEmail({ userId: params.id, newEmail: parsed.data.email });
   if (result === 'email_taken') {
-    return json({ error: { code: 'email_taken', message: 'Этот email уже занят' } }, { status: 409 });
+    return json(
+      { error: { code: 'email_taken', message: 'Этот email уже занят' } },
+      { status: 409 }
+    );
   }
   if (result === 'not_found') {
-    return json({ error: { code: 'not_found', message: 'Пользователь не найден' } }, { status: 404 });
+    return json(
+      { error: { code: 'not_found', message: 'Пользователь не найден' } },
+      { status: 404 }
+    );
   }
 
-  log.info('admin_changed_user_email', { userId: params.id, newEmail: parsed.data.email });
+  log.info('admin_changed_user_email', { userId: params.id });
   return json({ ok: true, email: parsed.data.email }, { status: 200 });
 };

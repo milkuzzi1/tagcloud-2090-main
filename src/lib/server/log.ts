@@ -70,13 +70,25 @@ export function genRequestId(): string {
 //   - sessionid/session_id, csrf_token,
 //   - creator_token, verify_token и т.п. суффиксы *token / *secret.
 // Match по lower-cased имени, разделители (_, -) игнорируются.
+// NB: email НЕ редачим по имени ключа (ловило бы emailVerified/emailSent и т.п.);
+// вместо этого не логируем сырые адреса на call-site'ах (change-email,
+// transfer-admin, users/[id]).
 const REDACT_RE =
   /(password|passwd|secret|api[_-]?key|token|cookie|authorization|session[_-]?id|csrf|otp)/;
 
-function redact(obj: Record<string, unknown>): Record<string, unknown> {
+// Рекурсивный redact: проходит вложенные объекты и массивы, а не только
+// верхний уровень. Иначе `log.error('x', { details: { password } })` или
+// вложенный error-объект протекли бы мимо маски. Error/Date сводим к строке,
+// чтобы не уткнуться в циклические ссылки.
+function redact(value: unknown, depth = 0): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Error) return value.message;
+  if (depth > 6) return '[Object]'; // защита от слишком глубоких/циклических структур
+  if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1));
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = REDACT_RE.test(k.toLowerCase()) ? '[REDACTED]' : v;
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = REDACT_RE.test(k.toLowerCase()) ? '[REDACTED]' : redact(v, depth + 1);
   }
   return out;
 }
@@ -88,8 +100,8 @@ function emit(level: Level, msg: string, extra?: Record<string, unknown>): void 
     level,
     time: new Date().toISOString(),
     msg,
-    ...(ctx ? redact(ctx) : {}),
-    ...(extra ? redact(extra) : {})
+    ...(ctx ? (redact(ctx) as Record<string, unknown>) : {}),
+    ...(extra ? (redact(extra) as Record<string, unknown>) : {})
   };
   // stderr для warn+, stdout для остальных — чтобы systemd/journald
   // правильно классифицировал.

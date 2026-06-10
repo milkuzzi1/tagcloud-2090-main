@@ -35,7 +35,9 @@ const { values: args } = parseArgs({
 });
 
 if (!args.email) {
-  console.error('Usage: tsx scripts/create-admin.ts --email admin@example.com [--baseUrl https://yourdomain.com]');
+  console.error(
+    'Usage: tsx scripts/create-admin.ts --email admin@example.com [--baseUrl https://yourdomain.com]'
+  );
   process.exit(1);
 }
 
@@ -107,9 +109,7 @@ try {
       process.exit(0);
     }
     // Upgrade existing user to admin
-    await db.update(users)
-      .set({ role: 'admin' })
-      .where(eq(users.id, existing.id));
+    await db.update(users).set({ role: 'admin' }).where(eq(users.id, existing.id));
     userId = existing.id;
     console.log(`\n\u2763 Upgraded existing user ${email} to admin.`);
   } else {

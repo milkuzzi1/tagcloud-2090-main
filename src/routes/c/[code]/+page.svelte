@@ -8,6 +8,8 @@
   let { data }: PageProps = $props();
   const survey = $derived(data.survey);
   const creatorToken = $derived(data.creatorToken);
+  // Залогиненному владельцу токен не приходит — идём по session-cookie.
+  const tokenQuery = $derived(creatorToken ? `?t=${encodeURIComponent(creatorToken)}` : '');
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   // Initial-only чтение через untrack: SSR-снапшот фиксирован, дальше
@@ -36,9 +38,7 @@
     if (typeof window === 'undefined') return;
     if (stopReconnect || stopped) return;
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(
-      `${proto}://${window.location.host}/ws/${survey.code}?t=${encodeURIComponent(creatorToken)}`
-    );
+    ws = new WebSocket(`${proto}://${window.location.host}/ws/${survey.code}${tokenQuery}`);
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data) as ServerMsg;
@@ -136,7 +136,17 @@
     width={viewportSize.width}
     height={viewportSize.height}
     aria-label="Облако ответов"
+    aria-describedby="cloud-sr-summary"
   ></canvas>
+
+  <!-- Текстовая альтернатива облака для скринридеров: canvas сам по себе
+       недоступен. Список слов с частотами + текущий вопрос. -->
+  <div id="cloud-sr-summary" class="sr-only" aria-live="polite">
+    {#if activeQuestion}Вопрос: {activeQuestion.text}.
+    {/if}{#if activeWords.length > 0}{totalVotes}
+      голос(ов). Ответы: {activeWords.map(([w, c]) => `${w} — ${c}`).join(', ')}.{:else}Пока нет
+      ответов.{/if}
+  </div>
 
   {#if activeWords.length === 0}
     <div class="empty">
@@ -166,6 +176,19 @@
 </div>
 
 <style>
+  /* Видно только скринридерам: убрано с экрана, но доступно ассистивным
+     технологиям (текстовая альтернатива canvas-облака). */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .cloud-screen {
     position: relative;
     width: 100vw;

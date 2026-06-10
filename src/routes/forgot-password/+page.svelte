@@ -39,7 +39,7 @@
       Если такой адрес есть в системе, мы отправили ссылку для сброса пароля на <b>{email}</b>.
     </p>
     {#if ttlHours}
-      <p class="muted">Ссылка действует {ttlHours} ч.</p>
+      <p class="muted">Ссылка действует {ttlHours} ч.</p>
     {/if}
     <p class="footer-link"><a href="/login">Назад ко входу</a></p>
   {:else}

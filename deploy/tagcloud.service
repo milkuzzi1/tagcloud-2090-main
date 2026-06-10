@@ -58,7 +58,7 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 SystemCallArchitectures=native
 
-# Лимиты ресурсов под одного процесса (для 1000 concurrent: см. Sprint 2 cluster).
+# Лимит открытых файлов: запас под WebSocket-коннекты и пул соединений к БД.
 LimitNOFILE=65536
 
 # Размер пула libuv thread-pool. bcrypt и dns lookups блокируют поток —

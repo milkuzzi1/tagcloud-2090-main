@@ -24,6 +24,11 @@ const queryClient = postgres(url, {
 export const db = drizzle(queryClient, { schema });
 export { schema };
 
+// Исполнитель запросов: либо пул (`db`), либо транзакция (`tx`). Функции,
+// которые должны уметь работать и автономно, и внутри транзакции, принимают
+// этот тип параметром (дефолт — `db`).
+export type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export async function pingDb(): Promise<boolean> {
   try {
     await queryClient`select 1`;
@@ -31,4 +36,13 @@ export async function pingDb(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Закрывает пул соединений Postgres. Вызывается на graceful shutdown
+ * (см. hooks.server.ts), чтобы не оставлять висящие коннекты при остановке
+ * контейнера/сервиса. `{ timeout: 5 }` — даём активным запросам до 5с.
+ */
+export async function closeDb(): Promise<void> {
+  await queryClient.end({ timeout: 5 });
 }

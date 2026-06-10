@@ -1,13 +1,14 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
 
   // Initial values seeded from the load() data. The members list is mutated
   // locally for optimistic UI (remove member, email change), so it is $state,
-  // not $derived. Reading the props once here is intentional (snapshot), hence
-  // the indirection to avoid the state_referenced_locally hint.
-  const initial = data;
+  // not $derived. Reading the props once here is intentional (snapshot) —
+  // untrack делает снимок явно и снимает предупреждение state_referenced_locally.
+  const initial = untrack(() => data);
 
   // --- Members ---
   let members = $state(initial.members);
@@ -191,9 +192,29 @@
   <!-- Allowlist: add users allowed into the system (Req 4a / Req 5) -->
   <section>
     <h2>Доступ пользователей</h2>
-    <form onsubmit={(e) => { e.preventDefault(); addInvite(); }}>
-      <input class="input" type="email" bind:value={inviteEmail} placeholder="user@example.com" required maxlength="254" aria-label="Email пользователя" />
-      <input class="input input-note" type="text" bind:value={inviteNote} placeholder="заметка (необязательно)" maxlength="200" aria-label="Заметка" />
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        addInvite();
+      }}
+    >
+      <input
+        class="input"
+        type="email"
+        bind:value={inviteEmail}
+        placeholder="user@example.com"
+        required
+        maxlength="254"
+        aria-label="Email пользователя"
+      />
+      <input
+        class="input input-note"
+        type="text"
+        bind:value={inviteNote}
+        placeholder="заметка (необязательно)"
+        maxlength="200"
+        aria-label="Заметка"
+      />
       <button type="submit" class="btn btn-primary" disabled={invitingBusy}>
         {invitingBusy ? 'Добавляем…' : 'Пригласить'}
       </button>
@@ -218,7 +239,9 @@
             {:else}
               <span class="badge badge-muted">ожидает</span>
             {/if}
-            <button class="btn btn-sm" onclick={() => openEditEmail(m.id, m.email)}>Изменить email</button>
+            <button class="btn btn-sm" onclick={() => openEditEmail(m.id, m.email)}
+              >Изменить email</button
+            >
             <button class="btn btn-sm btn-danger" onclick={() => openRemove(m.id)}>Удалить</button>
           </li>
         {/each}
@@ -229,9 +252,29 @@
   <!-- Change admin email (Req 4b) -->
   <section>
     <h2>Изменить email</h2>
-    <form onsubmit={(e) => { e.preventDefault(); changeEmail(); }}>
-      <input class="input" type="email" bind:value={newEmail} required maxlength="254" aria-label="Новый email" />
-      <input class="input" type="password" bind:value={currentPassword} placeholder="текущий пароль" required autocomplete="current-password" aria-label="Текущий пароль" />
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        changeEmail();
+      }}
+    >
+      <input
+        class="input"
+        type="email"
+        bind:value={newEmail}
+        required
+        maxlength="254"
+        aria-label="Новый email"
+      />
+      <input
+        class="input"
+        type="password"
+        bind:value={currentPassword}
+        placeholder="текущий пароль"
+        required
+        autocomplete="current-password"
+        aria-label="Текущий пароль"
+      />
       <button type="submit" class="btn btn-primary" disabled={emailBusy}>
         {emailBusy ? 'Сохраняем…' : 'Изменить email'}
       </button>
@@ -246,13 +289,27 @@
 
     {#if canTransfer}
       <p class="muted">
-        Передать администрирование другому человеку. Ему придёт письмо со ссылкой
-        для установки пароля. <strong>Ваша учётная запись будет удалена только
-        после того, как новый администратор задаст пароль.</strong> Новый
-        администратор не сможет создавать других администраторов.
+        Передать администрирование другому человеку. Ему придёт письмо со ссылкой для установки
+        пароля. <strong
+          >Ваша учётная запись будет удалена только после того, как новый администратор задаст
+          пароль.</strong
+        > Новый администратор не сможет создавать других администраторов.
       </p>
-      <form onsubmit={(e) => { e.preventDefault(); transferAdmin(); }}>
-        <input class="input" type="email" bind:value={transferEmail} placeholder="new-admin@example.com" required maxlength="254" aria-label="Email нового администратора" />
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          transferAdmin();
+        }}
+      >
+        <input
+          class="input"
+          type="email"
+          bind:value={transferEmail}
+          placeholder="new-admin@example.com"
+          required
+          maxlength="254"
+          aria-label="Email нового администратора"
+        />
         <button type="submit" class="btn btn-danger" disabled={transferBusy}>
           {transferBusy ? 'Отправляем…' : 'Передать администрирование'}
         </button>
@@ -265,8 +322,8 @@
       {#if transferError}<p class="error">{transferError}</p>{/if}
     {:else}
       <p class="muted">
-        Передача администрирования недоступна: она разрешена только когда в системе
-        единственный администратор.
+        Передача администрирования недоступна: она разрешена только когда в системе единственный
+        администратор.
       </p>
     {/if}
   </section>
@@ -279,7 +336,9 @@
     class="modal-backdrop"
     role="presentation"
     onclick={() => (editingId = null)}
-    onkeydown={(e) => { if (e.key === 'Escape') editingId = null; }}
+    onkeydown={(e) => {
+      if (e.key === 'Escape') editingId = null;
+    }}
   >
     <div
       class="modal"
@@ -293,7 +352,12 @@
     >
       <h2 id="edit-email-title">Изменить email пользователя</h2>
       {#if target}<p class="hint muted">Текущий: {target.email}</p>{/if}
-      <form onsubmit={(e) => { e.preventDefault(); confirmEditEmail(); }}>
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          confirmEditEmail();
+        }}
+      >
         <input
           class="input"
           type="email"
@@ -321,7 +385,9 @@
     class="modal-backdrop"
     role="presentation"
     onclick={() => (removingId = null)}
-    onkeydown={(e) => { if (e.key === 'Escape') removingId = null; }}
+    onkeydown={(e) => {
+      if (e.key === 'Escape') removingId = null;
+    }}
   >
     <div
       class="modal"
@@ -354,26 +420,113 @@
 {/if}
 
 <style>
-  .page { max-width: 680px; margin: 0 auto; }
-  section { margin-bottom: var(--space-8); }
-  h2 { margin-bottom: var(--space-3); }
-  form { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
-  .input { flex: 1; min-width: 180px; }
-  .input-note { flex: 1; min-width: 140px; }
-  .list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-  .list li { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) 0; border-bottom: 1px solid var(--c-border); }
-  .email { font-weight: 500; flex: 1; }
-  .note { font-size: 0.85rem; }
-  .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
-  .badge-muted { background: var(--c-surface); color: var(--c-muted); border: 1px solid var(--c-border); }
-  .btn-sm { padding: 2px 10px; font-size: 0.8rem; }
-  .success { color: var(--c-success); margin-top: var(--space-2); }
-  .error { color: var(--c-danger); margin-top: var(--space-2); }
-  .muted { color: var(--c-muted); }
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .modal { background: var(--c-bg); border-radius: var(--radius-lg); padding: var(--space-6); max-width: 400px; width: 100%; box-shadow: var(--shadow-lg); }
-  .modal h2 { margin-bottom: var(--space-3); }
-  .checkbox-label { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; cursor: pointer; }
-  .hint { font-size: 0.85rem; }
-  .modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-4); }
+  .page {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  section {
+    margin-bottom: var(--space-8);
+  }
+  h2 {
+    margin-bottom: var(--space-3);
+  }
+  form {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+  }
+  .input {
+    flex: 1;
+    min-width: 180px;
+  }
+  .input-note {
+    flex: 1;
+    min-width: 140px;
+  }
+  .list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .list li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .email {
+    font-weight: 500;
+    flex: 1;
+  }
+  .note {
+    font-size: 0.85rem;
+  }
+  .badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+  .badge-muted {
+    background: var(--c-surface);
+    color: var(--c-muted);
+    border: 1px solid var(--c-border);
+  }
+  .btn-sm {
+    padding: 2px 10px;
+    font-size: 0.8rem;
+  }
+  .success {
+    color: var(--c-success);
+    margin-top: var(--space-2);
+  }
+  .error {
+    color: var(--c-danger);
+    margin-top: var(--space-2);
+  }
+  .muted {
+    color: var(--c-muted);
+  }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal {
+    background: var(--c-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    max-width: 400px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal h2 {
+    margin-bottom: var(--space-3);
+  }
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-3) 0;
+    cursor: pointer;
+  }
+  .hint {
+    font-size: 0.85rem;
+  }
+  .modal-actions {
+    display: flex;
+    gap: var(--space-2);
+    justify-content: flex-end;
+    margin-top: var(--space-4);
+  }
 </style>
