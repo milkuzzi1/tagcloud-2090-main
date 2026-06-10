@@ -75,6 +75,18 @@ describe('log', () => {
     expect(rec.email).toBe('e@e');
   });
 
+  it('redact работает рекурсивно (вложенные объекты/массивы)', () => {
+    log.info('nested', {
+      outer: { token: 'abc', safe: 1 },
+      list: [{ secret: 'x' }, { ok: 'y' }]
+    });
+    const rec = JSON.parse(captured[0]);
+    expect(rec.outer.token).toBe('[REDACTED]');
+    expect(rec.outer.safe).toBe(1);
+    expect(rec.list[0].secret).toBe('[REDACTED]');
+    expect(rec.list[1].ok).toBe('y');
+  });
+
   it('genRequestId возвращает валидный uuid', () => {
     const id = genRequestId();
     expect(id).toMatch(/^[0-9a-f-]{36}$/);

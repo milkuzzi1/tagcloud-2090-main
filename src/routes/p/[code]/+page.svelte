@@ -10,6 +10,8 @@
   const respondentUrl = $derived(data.respondentUrl);
   const qrPngBase64Data = $derived(data.qrPngBase64Data);
   const creatorToken = $derived(data.creatorToken);
+  // Залогиненному владельцу токен не приходит — идём по session-cookie.
+  const tokenQuery = $derived(creatorToken ? `?t=${encodeURIComponent(creatorToken)}` : '');
   const isActive = $derived(survey.status === 'active');
 
   let canvas = $state<HTMLCanvasElement | null>(null);
@@ -45,7 +47,7 @@
     if (stopReconnect) return;
     if (!isActive) return;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws/${survey.code}?t=${encodeURIComponent(creatorToken)}`;
+    const url = `${proto}://${location.host}/ws/${survey.code}${tokenQuery}`;
     ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       try {

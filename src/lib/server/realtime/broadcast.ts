@@ -2,9 +2,21 @@ import type { WebSocket } from 'ws';
 import { redis } from '../redis';
 import { encode, type ServerMsg } from './protocol';
 import { incWsConnected, decWsConnected } from '../metrics';
+import { log } from '../log';
 import type { CloudWord, SurveyStatus } from '$lib/types/cloud';
 
 const TICK_MS = 2500;
+// Heartbeat: пингуем сокеты раз в 30с и убиваем неответившие. Полу-открытые
+// соединения (мобилка ушла в сон, прокси-таймаут, обрыв без FIN) иначе висели
+// бы в комнате до TCP-таймаута, копя память и FD.
+const HEARTBEAT_MS = 30_000;
+// Лимиты для публичного (без аутентификации) /ws/c/{code}: держат ресурсы
+// single-VPS под контролем. Один IP не должен занять всю комнату/память.
+const MAX_SUBS_PER_ROOM = 500;
+const MAX_SUBS_PER_IP = 10;
+// Порог backpressure: если клиент не успевает вычитывать и серверный буфер
+// сокета раздулся — дропаем его, чтобы не утекала память на медленных клиентах.
+const MAX_BUFFERED_BYTES = 1 << 16; // 64 КБ
 // Дефолтный лимит, если в room не пришёл `maxWords`. Совпадает с дефолтом
 // `surveys.max_words` (см. schema.ts). Клиент в любом случае срежет до своего
 // `survey.maxWords`, но без согласованного дефолта мы либо платим лишний
@@ -16,11 +28,19 @@ type Room = {
   questionIds: string[];
   topN: number;
   subscribers: Set<WebSocket>;
+  // Счётчик соединений на IP внутри комнаты — для MAX_SUBS_PER_IP.
+  subsByIp: Map<string, number>;
   lastTop: Map<string, string>;
 };
 
 const rooms = new Map<string, Room>();
 let tickerHandle: NodeJS.Timeout | null = null;
+let heartbeatHandle: NodeJS.Timeout | null = null;
+
+// IP сокета (для декремента per-IP при отключении) и liveness-флаг heartbeat'а.
+// WeakMap — чтобы не держать ссылки на закрытые сокеты.
+const wsIp = new WeakMap<WebSocket, string>();
+const wsAlive = new WeakMap<WebSocket, boolean>();
 
 async function fetchTop(questionId: string, topN: number): Promise<CloudWord[]> {
   const raw = await redis.zrevrange(`cloud:${questionId}`, 0, topN - 1, 'WITHSCORES');
@@ -34,7 +54,14 @@ async function fetchTop(questionId: string, topN: number): Promise<CloudWord[]> 
 }
 
 function send(ws: WebSocket, msg: ServerMsg): void {
-  if (ws.readyState === ws.OPEN) ws.send(encode(msg));
+  if (ws.readyState !== ws.OPEN) return;
+  // Backpressure: медленный клиент не должен раздувать серверную память.
+  if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+    log.warn('ws_slow_client_dropped', { buffered: ws.bufferedAmount });
+    ws.close(1013, 'slow_client'); // 1013 = Try Again Later
+    return;
+  }
+  ws.send(encode(msg));
 }
 
 export function getRoom(code: string, questionIds: string[], maxWords?: number): Room {
@@ -46,6 +73,7 @@ export function getRoom(code: string, questionIds: string[], maxWords?: number):
       questionIds,
       topN,
       subscribers: new Set(),
+      subsByIp: new Map(),
       lastTop: new Map()
     };
     rooms.set(code, room);
@@ -56,10 +84,28 @@ export function getRoom(code: string, questionIds: string[], maxWords?: number):
   return room;
 }
 
-export async function addSubscriber(room: Room, ws: WebSocket): Promise<void> {
+/**
+ * Подписывает сокет на комнату. Возвращает false, если превышены лимиты
+ * (размер комнаты или число соединений с этого IP) — вызывающий тогда должен
+ * закрыть сокет. `ip` — реальный IP клиента (см. net/client-ip.ts).
+ */
+export async function addSubscriber(room: Room, ws: WebSocket, ip: string): Promise<boolean> {
+  if (room.subscribers.size >= MAX_SUBS_PER_ROOM) {
+    log.warn('ws_room_full', { code: room.code, size: room.subscribers.size });
+    return false;
+  }
+  const ipCount = room.subsByIp.get(ip) ?? 0;
+  if (ipCount >= MAX_SUBS_PER_IP) {
+    log.warn('ws_per_ip_limit', { code: room.code });
+    return false;
+  }
+
   room.subscribers.add(ws);
+  room.subsByIp.set(ip, ipCount + 1);
+  wsIp.set(ws, ip);
+  registerHeartbeat(ws);
   incWsConnected();
-  ensureTicker();
+  ensureTimers();
   // Параллельный fetchTop по всем вопросам опроса — экономит N×RTT до Redis
   // на handshake'е (на 5+ вопросах разница хорошо заметна).
   const snapshots = await Promise.all(
@@ -69,31 +115,42 @@ export async function addSubscriber(room: Room, ws: WebSocket): Promise<void> {
     send(ws, { type: 'snapshot', questionId: qid, words });
     room.lastTop.set(qid, JSON.stringify(words));
   }
+  return true;
 }
 
 export function removeSubscriber(room: Room, ws: WebSocket): void {
   if (room.subscribers.delete(ws)) {
     decWsConnected();
+    const ip = wsIp.get(ws);
+    if (ip !== undefined) {
+      const n = (room.subsByIp.get(ip) ?? 1) - 1;
+      if (n <= 0) room.subsByIp.delete(ip);
+      else room.subsByIp.set(ip, n);
+    }
   }
   if (room.subscribers.size === 0) {
     rooms.delete(room.code);
-    maybeStopTicker();
+    maybeStopTimers();
   }
 }
 
 export function notifyClosed(code: string, reason: 'expired' | 'sent' | 'failed'): void {
   const room = rooms.get(code);
   if (!room) return;
-  // Декрементируем счётчик ОДИН раз за фактически отписанный сокет.
-  // Раньше `decWsConnected` вызывался здесь и ещё раз через `ws.close → 'close'-handler`
-  // → счётчик уползал в минус.
+  const count = room.subscribers.size;
   for (const ws of room.subscribers) {
     send(ws, { type: 'closed', reason });
     if (ws.readyState === ws.OPEN) ws.close(1000, reason);
   }
-  decWsConnected(room.subscribers.size);
+  // Очищаем set ДО того, как сработают 'close'-хендлеры сокетов: иначе
+  // removeSubscriber для каждого закрытого сокета декрементировал бы счётчик
+  // ещё раз (двойной декремент → gauge уходил в минус). Декрементируем один
+  // раз на всю комнату здесь.
+  room.subscribers.clear();
+  room.subsByIp.clear();
+  decWsConnected(count);
   rooms.delete(code);
-  maybeStopTicker();
+  maybeStopTimers();
 }
 
 // ───────────────────────────────────────────────────────────
@@ -111,14 +168,25 @@ export function notifyClosed(code: string, reason: 'expired' | 'sent' | 'failed'
 
 const userChannels = new Map<string, Set<WebSocket>>();
 
-export function addUserSubscriber(userId: string, ws: WebSocket): void {
+// Лимит одновременных /ws/u-соединений на пользователя: вкладки/устройства
+// легитимны, но без потолка скомпрометированный аккаунт мог бы открыть тысячи.
+const MAX_USER_WS = 8;
+
+export function addUserSubscriber(userId: string, ws: WebSocket): boolean {
   let set = userChannels.get(userId);
   if (!set) {
     set = new Set();
     userChannels.set(userId, set);
   }
+  if (set.size >= MAX_USER_WS) {
+    log.warn('ws_user_limit', { userId });
+    return false;
+  }
   set.add(ws);
+  registerHeartbeat(ws);
   incWsConnected();
+  ensureTimers();
+  return true;
 }
 
 export function removeUserSubscriber(userId: string, ws: WebSocket): void {
@@ -128,6 +196,7 @@ export function removeUserSubscriber(userId: string, ws: WebSocket): void {
     decWsConnected();
   }
   if (set.size === 0) userChannels.delete(userId);
+  maybeStopTimers();
 }
 
 export function notifyUserSurveyStatus(
@@ -144,22 +213,58 @@ export function notifyUserSurveyStatus(
   }
 }
 
-function ensureTicker(): void {
-  if (tickerHandle) return;
-  tickerHandle = setInterval(() => {
-    void tick();
-  }, TICK_MS);
+function ensureTimers(): void {
+  if (!tickerHandle) {
+    tickerHandle = setInterval(() => {
+      void tick();
+    }, TICK_MS);
+  }
+  if (!heartbeatHandle) {
+    heartbeatHandle = setInterval(heartbeat, HEARTBEAT_MS);
+  }
 }
 
-// Останавливаем глобальный таймер, когда подписчиков не осталось ни в одной
-// комнате: иначе на простаивающем сервере висел бесконечный setInterval с
-// пустым проходом по rooms (1 пустой Map.values() итератор каждые 2.5с — это
-// мелочь, но предотвращает «paper handle leak» при graceful shutdown).
-function maybeStopTicker(): void {
-  if (!tickerHandle) return;
-  if (rooms.size > 0) return;
-  clearInterval(tickerHandle);
-  tickerHandle = null;
+// Останавливаем глобальные таймеры, когда подписчиков не осталось ни в одной
+// комнате и ни в одном user-канале: иначе на простаивающем сервере висели бы
+// бесконечные setInterval'ы.
+function maybeStopTimers(): void {
+  if (rooms.size > 0 || userChannels.size > 0) return;
+  if (tickerHandle) {
+    clearInterval(tickerHandle);
+    tickerHandle = null;
+  }
+  if (heartbeatHandle) {
+    clearInterval(heartbeatHandle);
+    heartbeatHandle = null;
+  }
+}
+
+// --- Heartbeat: ping/pong liveness, реапинг мёртвых сокетов ------------------
+
+function registerHeartbeat(ws: WebSocket): void {
+  wsAlive.set(ws, true);
+  ws.on('pong', () => wsAlive.set(ws, true));
+}
+
+function* allSockets(): Generator<WebSocket> {
+  for (const room of rooms.values()) for (const ws of room.subscribers) yield ws;
+  for (const set of userChannels.values()) for (const ws of set) yield ws;
+}
+
+function heartbeat(): void {
+  for (const ws of allSockets()) {
+    if (wsAlive.get(ws) === false) {
+      // Не ответил на прошлый ping за целый интервал — считаем мёртвым.
+      ws.terminate();
+      continue;
+    }
+    wsAlive.set(ws, false);
+    try {
+      ws.ping();
+    } catch {
+      ws.terminate();
+    }
+  }
 }
 
 async function tick(): Promise<void> {

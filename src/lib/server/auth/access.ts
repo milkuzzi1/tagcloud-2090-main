@@ -48,7 +48,7 @@ export type AccessOpts = {
  * атака практически невыполнима, но `timingSafeEqual` дешёвый и
  * правильный по гигиене).
  */
-function constantTimeEqual(a: string, b: string): boolean {
+export function constantTimeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);

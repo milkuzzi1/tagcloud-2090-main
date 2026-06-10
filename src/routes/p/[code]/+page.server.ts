@@ -48,7 +48,8 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
     survey,
     respondentUrl,
     qrPngBase64Data,
-    creatorToken: survey.creatorToken,
+    // Токен не отдаём залогиненному владельцу — клиент идёт по session-cookie.
+    creatorToken: userId ? undefined : survey.creatorToken,
     initialWords
   };
 };

@@ -30,7 +30,9 @@ export const GET: RequestHandler = async ({ request, setHeaders }) => {
     const auth = request.headers.get('authorization') ?? '';
     const match = /^Bearer\s+(.+)$/.exec(auth);
     if (!match || !safeEqual(match[1], expected)) {
-      throw error(401, 'unauthorized');
+      // 404 (а не 401): не подтверждаем существование эндпоинта при неверном
+      // токене — единый ответ с анонимным сканером (см. ветку ниже).
+      throw error(404, 'not found');
     }
   } else if (env.METRICS_ALLOW_UNAUTHENTICATED !== 'true') {
     throw error(404, 'not found');

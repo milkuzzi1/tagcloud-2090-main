@@ -31,6 +31,43 @@ describe('csvEscape', () => {
   });
 });
 
+describe('csvEscape: formula injection (CSV/Excel)', () => {
+  // Значения, начинающиеся с = + - @ TAB CR, Excel/LibreOffice трактуют как
+  // формулу. csvEscape должен обезвредить: обернуть в кавычки и префиксовать
+  // апострофом (апостроф съедается парсером, формула не исполняется).
+  it('= в начале экранируется апострофом', () => {
+    expect(csvEscape('=1+1')).toBe('"\'=1+1"');
+  });
+
+  it('+ в начале экранируется', () => {
+    expect(csvEscape('+1')).toBe('"\'+1"');
+  });
+
+  it('- в начале экранируется', () => {
+    expect(csvEscape('-1')).toBe('"\'-1"');
+  });
+
+  it('@ в начале экранируется', () => {
+    expect(csvEscape('@SUM(A1)')).toBe('"\'@SUM(A1)"');
+  });
+
+  it('классический payload =cmd|... обезврежен', () => {
+    expect(csvEscape("=cmd|'/c calc'!A0")).toBe("\"'=cmd|'/c calc'!A0\"");
+  });
+
+  it('TAB в начале экранируется', () => {
+    expect(csvEscape('\tx')).toBe('"\'\tx"');
+  });
+
+  it('формула с кавычкой внутри: апостроф + удвоение кавычек', () => {
+    expect(csvEscape('=1"2')).toBe('"\'=1""2"');
+  });
+
+  it('= НЕ в начале не считается формулой', () => {
+    expect(csvEscape('a=1')).toBe('a=1');
+  });
+});
+
 describe('CSV_BOM', () => {
   it('сериализуется в UTF-8 как EF BB BF (Excel-friendly)', () => {
     const buf = Buffer.from(CSV_BOM, 'utf8');

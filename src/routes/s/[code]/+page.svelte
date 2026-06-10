@@ -10,6 +10,9 @@
   const respondentUrl = $derived(data.respondentUrl);
   const qrPngBase64Data = $derived(data.qrPngBase64Data);
   const creatorToken = $derived(data.creatorToken);
+  // Залогиненному владельцу токен не приходит (доступ по session-cookie) —
+  // тогда суффикс пустой, а cookie уходит автоматически same-origin.
+  const tokenQuery = $derived(creatorToken ? `?t=${encodeURIComponent(creatorToken)}` : '');
   const isActive = $derived(survey.status === 'active');
 
   let canvas = $state<HTMLCanvasElement | null>(null);
@@ -78,7 +81,7 @@
     if (stopReconnect) return;
     if (!isActive) return;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws/${survey.code}?t=${encodeURIComponent(creatorToken)}`;
+    const url = `${proto}://${location.host}/ws/${survey.code}${tokenQuery}`;
     ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       try {
@@ -157,7 +160,7 @@
   }
 
   function csvUrl(): string {
-    return `/api/surveys/${survey.code}/export.csv?t=${encodeURIComponent(creatorToken)}`;
+    return `/api/surveys/${survey.code}/export.csv${tokenQuery}`;
   }
 
   let confirmFinish = $state(false);
@@ -170,10 +173,7 @@
     retrying = true;
     retryError = null;
     try {
-      const r = await fetch(
-        `/api/surveys/${survey.code}/retry?t=${encodeURIComponent(creatorToken)}`,
-        { method: 'POST' }
-      );
+      const r = await fetch(`/api/surveys/${survey.code}/retry${tokenQuery}`, { method: 'POST' });
       const data = await r.json();
       if (!r.ok) {
         retryError = data.error?.message ?? `Ошибка ${r.status}`;
@@ -191,10 +191,7 @@
     finishing = true;
     finishError = null;
     try {
-      const r = await fetch(
-        `/api/surveys/${survey.code}/finish?t=${encodeURIComponent(creatorToken)}`,
-        { method: 'POST' }
-      );
+      const r = await fetch(`/api/surveys/${survey.code}/finish${tokenQuery}`, { method: 'POST' });
       const data = await r.json();
       if (!r.ok) {
         finishError = data.error?.message ?? `Ошибка ${r.status}`;

@@ -1,6 +1,7 @@
 import { eq, desc, sql, asc } from 'drizzle-orm';
 import { db } from '../db';
 import { surveys, questions } from '../schema';
+import { constantTimeEqual } from '../auth/access';
 
 export type QuestionPublic = {
   id: string;
@@ -87,10 +88,14 @@ export async function getSurveyForCreator(
   if (!data) return null;
   const { survey, questions: qs } = data;
 
-  // Доступ: либо session (userId матчит surveys.user_id), либо старый ?t=token
+  // Доступ: либо session (userId матчит surveys.user_id), либо старый ?t=token.
+  // Сравнение токена — constant-time (см. auth/access.ts), чтобы не давать
+  // тайминг-сигнал при подборе creatorToken.
   const ok =
     (opts.userId !== undefined && survey.userId === opts.userId) ||
-    (opts.token !== undefined && survey.creatorToken === opts.token);
+    (opts.token !== undefined &&
+      opts.token !== null &&
+      constantTimeEqual(survey.creatorToken, opts.token));
   if (!ok) return null;
 
   return {

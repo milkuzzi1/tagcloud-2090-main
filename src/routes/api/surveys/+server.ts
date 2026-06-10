@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { CreateSurveySchema } from '$lib/server/surveys/validation';
 import { createSurvey } from '$lib/server/surveys/create';
 import { qrPngBase64 } from '$lib/server/qr/generate';
-import { env } from '$env/dynamic/private';
+import { resolvePublicBaseUrl } from '$lib/server/net/base-url';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, url, locals }) => {
@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     userId: locals.user.id,
     email: locals.user.email
   });
-  const baseUrl = env.PUBLIC_BASE_URL || url.origin;
+  const baseUrl = resolvePublicBaseUrl(url.origin);
   const respondentUrl = `${baseUrl}/r/${result.code}`;
   const dashboardUrl = `${baseUrl}/s/${result.code}`;
   const qr = await qrPngBase64(respondentUrl);

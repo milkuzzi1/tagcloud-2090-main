@@ -14,8 +14,9 @@ import type { RequestHandler } from './$types';
  * Помечаем опрос как `expired` (если был `failed`) и запускаем обработку
  * в фоне через `setImmediate`. HTTP отвечает 202 сразу — UI снимает
  * крутилку «Отправляем…» и подписывается на статус через WS / опрос
- * страницы. Если фон упадёт — cron подберёт как stuck-expired через
- * STUCK_EXPIRED_THRESHOLD_MS.
+ * страницы. Если процесс упадёт между переходом в `expired` и завершением
+ * фона — cron подберёт опрос как stuck-expired (STUCK_EXPIRED_THRESHOLD_MS).
+ * Повторный сбой обработки снова даст `failed` → опять ручной retry.
  */
 export const POST: RequestHandler = async ({ params, url, locals }) => {
   const access = await requireCreatorAccess({

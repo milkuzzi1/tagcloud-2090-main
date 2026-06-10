@@ -1,4 +1,4 @@
-// Production entry для tagcloud (single- и multi-instance деплои).
+// Production entry для tagcloud.
 //
 // `@sveltejs/adapter-node` (build/index.js) умеет только обычные HTTP-запросы:
 // он создаёт http.Server и навешивает на него `request` listener через polka.
@@ -31,7 +31,7 @@
 //
 // Запускается через systemd:
 //   ExecStart=/usr/bin/node /opt/tagcloud/deploy/server.js
-// (см. deploy/tagcloud.service / deploy/tagcloud@.service).
+// (см. deploy/tagcloud.service).
 
 import { server as polkaServer } from '../build/index.js';
 

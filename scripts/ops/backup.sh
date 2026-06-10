@@ -30,9 +30,18 @@ filename="postgres-${ts}.dump"
 
 echo "[backup] starting at ${ts}"
 
-# Init восстанавливаем idempotent: первый запуск создаст репозиторий, после —
-# вернёт already exists и команда продолжит.
-restic snapshots >/dev/null 2>&1 || restic init
+# Инициализируем репозиторий только если его реально нет. Раньше было
+# `restic snapshots || restic init` — но `snapshots` падает и при битом/
+# недоступном репозитории (неверный пароль, повреждение), и тогда `init`
+# поверх существующего репо тоже завершится ошибкой, маскируя истинную
+# причину. Отличаем «репо отсутствует» от «репо есть, но недоступно».
+if ! restic snapshots >/dev/null 2>&1; then
+    if restic cat config >/dev/null 2>&1; then
+        echo "[backup] ERROR: репозиторий существует, но недоступен (пароль/повреждение)" >&2
+        exit 1
+    fi
+    restic init
+fi
 
 # pg_dump → restic, без промежуточного файла на диске.
 pg_dump --format=custom --compress=6 --no-owner --no-privileges "${DATABASE_URL}" \

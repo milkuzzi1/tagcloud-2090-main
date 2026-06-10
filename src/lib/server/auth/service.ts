@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
-import { db } from '../db';
+import { db, type Executor } from '../db';
 import { sessions, users } from '../schema';
 import { getDummyPasswordHash, hashPassword, verifyPassword } from './hash';
 import { createSession, type AuthUser } from './sessions';
@@ -42,7 +42,11 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
   // Only allowlisted emails may register as regular users
   const allowed = await isAllowlisted({ email: input.email });
   if (!allowed) {
-    return { ok: false, code: 'not_invited', message: 'Регистрация недоступна. Обратитесь к администратору.' };
+    return {
+      ok: false,
+      code: 'not_invited',
+      message: 'Регистрация недоступна. Обратитесь к администратору.'
+    };
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -156,8 +160,11 @@ export type PromoteAdminResult =
  * of creating a second row for the same email (which previously produced
  * duplicate accounts and a non-deterministic login).
  */
-export async function promoteOrCreateAdmin(email: string): Promise<PromoteAdminResult> {
-  const [existing] = await db
+export async function promoteOrCreateAdmin(
+  email: string,
+  exec: Executor = db
+): Promise<PromoteAdminResult> {
+  const [existing] = await exec
     .select({
       id: users.id,
       email: users.email,
@@ -171,7 +178,7 @@ export async function promoteOrCreateAdmin(email: string): Promise<PromoteAdminR
 
   if (existing) {
     if (existing.role !== 'admin') {
-      await db.update(users).set({ role: 'admin' }).where(eq(users.id, existing.id));
+      await exec.update(users).set({ role: 'admin' }).where(eq(users.id, existing.id));
     }
     return {
       ok: true,
@@ -185,7 +192,7 @@ export async function promoteOrCreateAdmin(email: string): Promise<PromoteAdminR
   const tmpPasswordHash = await hashPassword(crypto.randomUUID());
   const autoVerify = isEmailVerificationDisabled();
   try {
-    const [created] = await db
+    const [created] = await exec
       .insert(users)
       .values({
         email,
@@ -252,8 +259,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 export async function requestPasswordReset(
   input: ForgotPassword
 ): Promise<
-  | { ok: true; sent: false }
-  | { ok: true; sent: true; token: PasswordResetToken; email: string }
+  { ok: true; sent: false } | { ok: true; sent: true; token: PasswordResetToken; email: string }
 > {
   const [u] = await db
     .select({ id: users.id, email: users.email })

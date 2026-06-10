@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { requireAdmin } from '$lib/server/auth/access';
-import { addInvite, listInvites } from '$lib/server/auth/invites';
+import { addInvite } from '$lib/server/auth/invites';
 import { InviteEmailSchema } from '$lib/server/auth/validation';
 import { sendInvitationEmail } from '$lib/server/email/invitation';
 import { log } from '$lib/server/log';
@@ -54,7 +54,12 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   return json(
     {
       ok: true,
-      invite: { id: crypto.randomUUID(), email: parsed.data.email, note: parsed.data.note ?? null, registered: false },
+      invite: {
+        id: crypto.randomUUID(),
+        email: parsed.data.email,
+        note: parsed.data.note ?? null,
+        registered: false
+      },
       sent: created
     },
     { status: 200 }

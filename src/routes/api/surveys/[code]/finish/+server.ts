@@ -15,8 +15,11 @@ import type { RequestHandler } from './$types';
  *
  * Раньше тут был `await processExpired`: HTTP висел до завершения SMTP
  * (десятки секунд при медленном провайдере), один HTTP-воркер был занят
- * всё это время. Если фоновая задача упадёт — cron подберёт опрос как
- * stuck-expired (см. STUCK_EXPIRED_THRESHOLD_MS) и повторит попытку.
+ * всё это время. Если процесс УПАДЁТ между переходом в `expired` и
+ * завершением фоновой задачи — опрос останется `expired`, и cron подберёт
+ * его как stuck-expired (см. STUCK_EXPIRED_THRESHOLD_MS) и повторит.
+ * Если же фон отработает с ошибкой (SMTP/рендер), статус станет `failed` —
+ * cron его НЕ переберёт; повтор только вручную из дашборда (кнопка retry).
  */
 export const POST: RequestHandler = async ({ params, url, locals }) => {
   const access = await requireCreatorAccess({
@@ -56,8 +59,9 @@ export const POST: RequestHandler = async ({ params, url, locals }) => {
   // Финальный 'sent'/'failed' прилетит из processExpired ниже.
   notifyUserSurveyStatus(claimed.userId, claimed.code, 'expired');
 
-  // Запускаем обработку в фоне. Ошибки логируем — статус будет 'failed',
-  // дашборд автоматически предложит retry.
+  // Запускаем обработку в фоне. При ошибке статус станет 'failed', и дашборд
+  // предложит ручной retry (cron 'failed' автоматически не перебирает —
+  // во избежание бесконечных повторов на перманентно битых опросах).
   setImmediate(() => {
     void withLogContext({ surveyCode: claimed.code, surveyId: claimed.id }, () =>
       processExpired(claimed).catch((err) => {

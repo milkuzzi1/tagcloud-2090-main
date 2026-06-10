@@ -1,9 +1,11 @@
 import { json } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAdmin } from '$lib/server/auth/access';
 import { changeAdminEmail } from '$lib/server/auth/invites';
 import { verifyPassword, getDummyPasswordHash } from '$lib/server/auth/hash';
+import { COOKIE_NAME, createSession } from '$lib/server/auth/sessions';
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/schema';
 import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
@@ -23,7 +25,7 @@ const Body = z.object({
  * current password (re-auth) to prevent a hijacked session from silently
  * taking over the account by switching its email.
  */
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async ({ request, cookies, locals }) => {
   const admin = requireAdmin(locals.user);
 
   const rl = await checkAuthRateLimit(locals.clientIp, `change-email:${admin.id}`);
@@ -66,6 +68,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ error: { code: 'not_found', message: 'Аккаунт не найден' } }, { status: 404 });
   }
 
-  log.info('admin_email_changed', { userId: admin.id, newEmail: parsed.data.newEmail });
+  log.info('admin_email_changed', { userId: admin.id });
+  // changeUserEmail инвалидирует ВСЕ сессии пользователя (защита от удержания
+  // доступа по старой/угнанной сессии после смены контактного адреса). Так как
+  // админ только что прошёл re-auth по паролю, сразу выдаём ему новую сессию,
+  // чтобы он не разлогинился на ровном месте.
+  const { id: sessionId, expiresAt } = await createSession(admin.id);
+  cookies.set(COOKIE_NAME, sessionId, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: !dev,
+    expires: expiresAt
+  });
   return json({ ok: true, email: parsed.data.newEmail }, { status: 200 });
 };

@@ -1,14 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  AdminRegisterSchema,
   CredentialsSchema,
   ForgotPasswordSchema,
   InviteEmailSchema,
   LoginSchema,
-  normalizeOrgName,
-  OrganizationNameSchema,
-  ResetPasswordSchema,
-  UserRegisterSchema
+  RegisterSchema,
+  ResetPasswordSchema
 } from '../../src/lib/server/auth/validation';
 
 describe('CredentialsSchema', () => {
@@ -45,80 +42,42 @@ describe('CredentialsSchema', () => {
   });
 });
 
-describe('OrganizationNameSchema', () => {
-  it('обрезает пробелы и принимает обычное название', () => {
-    expect(OrganizationNameSchema.parse('  Школа №2090  ')).toBe('Школа №2090');
-  });
-
-  it('ругается на пустую строку', () => {
-    expect(OrganizationNameSchema.safeParse('   ').success).toBe(false);
-  });
-
-  it('ругается на > 100 символов', () => {
-    expect(OrganizationNameSchema.safeParse('a'.repeat(101)).success).toBe(false);
-  });
-});
-
-describe('normalizeOrgName', () => {
-  it('игнорирует регистр и пробелы по краям', () => {
-    expect(normalizeOrgName('  Школа №2090  ')).toBe('школа №2090');
-    expect(normalizeOrgName('ШКОЛА №2090')).toBe('школа №2090');
-  });
-
-  it('считает разные регистры одинаковыми (для UNIQUE-контракта)', () => {
-    expect(normalizeOrgName('Foo')).toBe(normalizeOrgName('FOO'));
-    expect(normalizeOrgName('Foo Bar')).toBe(normalizeOrgName('foo bar'));
-  });
-});
-
-describe('AdminRegisterSchema / UserRegisterSchema', () => {
-  it('принимает валидный набор полей', () => {
-    const out = AdminRegisterSchema.parse({
-      organizationName: 'Школа №2090',
-      email: 'A@b.com',
-      password: 'secret12'
-    });
-    expect(out.organizationName).toBe('Школа №2090');
+describe('RegisterSchema', () => {
+  it('принимает email + пароль, нормализует email', () => {
+    const out = RegisterSchema.parse({ email: 'A@b.com', password: 'secret12' });
     expect(out.email).toBe('a@b.com');
+    expect(out.password).toBe('secret12');
   });
 
-  it('ругается без organizationName', () => {
-    expect(AdminRegisterSchema.safeParse({ email: 'a@b.com', password: 'secret12' }).success).toBe(
-      false
-    );
+  it('ругается без email', () => {
+    expect(RegisterSchema.safeParse({ password: 'secret12' }).success).toBe(false);
   });
 
-  it('UserRegisterSchema принимает те же поля, что и Admin', () => {
-    const r = UserRegisterSchema.safeParse({
-      organizationName: 'Org',
-      email: 'a@b.com',
-      password: 'secret12'
-    });
-    expect(r.success).toBe(true);
+  it('ругается на короткий пароль', () => {
+    expect(RegisterSchema.safeParse({ email: 'a@b.com', password: 'short' }).success).toBe(false);
   });
 });
 
 describe('LoginSchema', () => {
-  it('требует organizationName, email и password', () => {
-    expect(LoginSchema.safeParse({ email: 'a@b.com', password: 'secret12' }).success).toBe(false);
-    expect(
-      LoginSchema.safeParse({
-        organizationName: 'Org',
-        email: 'a@b.com',
-        password: 'secret12'
-      }).success
-    ).toBe(true);
+  it('требует email и password (без organizationName)', () => {
+    expect(LoginSchema.safeParse({ password: 'secret12' }).success).toBe(false);
+    expect(LoginSchema.safeParse({ email: 'a@b.com', password: 'secret12' }).success).toBe(true);
+  });
+
+  it('нормализует email', () => {
+    const out = LoginSchema.parse({ email: '  X@Y.COM ', password: 'secret12' });
+    expect(out.email).toBe('x@y.com');
   });
 });
 
 describe('ForgotPasswordSchema', () => {
-  it('обрезает email и принимает org+email', () => {
-    const out = ForgotPasswordSchema.parse({
-      organizationName: ' Org ',
-      email: '  X@Y.COM '
-    });
-    expect(out.organizationName).toBe('Org');
+  it('обрезает и нормализует email', () => {
+    const out = ForgotPasswordSchema.parse({ email: '  X@Y.COM ' });
     expect(out.email).toBe('x@y.com');
+  });
+
+  it('ругается на невалидный email', () => {
+    expect(ForgotPasswordSchema.safeParse({ email: 'nope' }).success).toBe(false);
   });
 });
 

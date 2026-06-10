@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, onDestroy } from 'svelte';
   import type { PageProps } from './$types';
 
   let { data }: PageProps = $props();
@@ -33,7 +33,6 @@
   let errorMessage = $state<string | null>(null);
   let errorQuestionId = $state<string | null>(null);
 
-
   function stripWhitespace(s: string): string {
     return s.replace(/\s+/g, '');
   }
@@ -51,6 +50,10 @@
       spaceHintTimer = setTimeout(() => (spaceHint = false), 2500);
     }
   }
+
+  // Чистим висящий таймер при размонтировании: иначе setTimeout мог бы
+  // сработать после ухода со страницы (обновление state после unmount).
+  onDestroy(() => clearTimeout(spaceHintTimer));
 
   function removeWord(qid: string, idx: number) {
     answers[qid].splice(idx, 1);
@@ -233,7 +236,9 @@
           disabled={reachedLimit && currentQuestion.answerType === 'multi'}
         />
         {#if spaceHint}
-          <div class="hint hint-space" role="status">Только одно слово — пробелы не используются</div>
+          <div class="hint hint-space" role="status">
+            Только одно слово — пробелы не используются
+          </div>
         {/if}
         {#if currentQuestion.answerType === 'multi'}
           <div class="hint" id="q-{currentQuestion.id}-hint">

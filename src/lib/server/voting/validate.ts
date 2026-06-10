@@ -31,7 +31,11 @@ export type ValidationResult =
   | { ok: false; error: ValidationError };
 
 function normalize(word: string, caseSensitive: boolean): string {
-  return caseSensitive ? word : word.toLocaleLowerCase('ru-RU');
+  // NFC-нормализация: визуально одинаковые слова в разных Unicode-формах
+  // (precomposed `ё` U+0451 vs `е`+◌̈ U+0435 U+0308) иначе считались бы
+  // разными словами → накрутка/размывание облака. NFC канонизирует их.
+  const n = word.normalize('NFC');
+  return caseSensitive ? n : n.toLocaleLowerCase('ru-RU');
 }
 
 export async function validateSubmission(

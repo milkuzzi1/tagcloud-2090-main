@@ -1,12 +1,12 @@
 import { json } from '@sveltejs/kit';
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/schema';
 import { createVerificationToken, VERIFICATION_TTL_HOURS } from '$lib/server/auth/verification';
 import { sendVerificationEmail } from '$lib/server/email/verification';
 import { checkAuthRateLimit } from '$lib/server/voting/rate-limit';
+import { resolvePublicBaseUrl } from '$lib/server/net/base-url';
 import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
@@ -42,7 +42,8 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
 
   if (u && u.passwordHash && !u.emailVerified) {
     const v = await createVerificationToken(u.id, u.email);
-    const baseUrl = env.PUBLIC_BASE_URL || env.ORIGIN || url.origin;
+    // resolvePublicBaseUrl fail-closed в проде: не доверяем Host (url.origin).
+    const baseUrl = resolvePublicBaseUrl(url.origin);
     try {
       await sendVerificationEmail({
         to: u.email,

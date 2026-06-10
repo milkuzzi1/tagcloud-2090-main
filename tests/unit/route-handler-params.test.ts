@@ -55,7 +55,13 @@ describe('route handler RequestEvent destructuring', () => {
       for (const m of src.matchAll(SIG_RE)) {
         const keys = m[1]
           .split(',')
-          .map((k) => k.trim().split(':')[0].trim().replace(/\.\.\./, ''))
+          .map((k) =>
+            k
+              .trim()
+              .split(':')[0]
+              .trim()
+              .replace(/\.\.\./, '')
+          )
           .filter(Boolean);
         for (const k of keys) {
           // Only flag identifiers that look like a single property name.
