@@ -1,9 +1,13 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
-const url = env.DATABASE_URL;
+// Во время `vite build` SvelteKit импортирует серверные модули для анализа
+// (prerender/analyse), когда реальных env ещё нет. Подставляем заглушку —
+// postgres-js подключается лениво, соединение не открывается.
+const url = building ? 'postgres://build:build@localhost:5432/build' : env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL is not set');
 
 // Размер пула — настраивается из env под целевую нагрузку. Под 1000

@@ -1,14 +1,18 @@
 import Redis from 'ioredis';
+import { building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { log } from './log';
 
-const url = env.REDIS_URL;
+// Во время `vite build` SvelteKit импортирует серверные модули для анализа,
+// когда реальных env ещё нет. Подставляем заглушку и не подключаемся
+// (lazyConnect: true в режиме сборки).
+const url = building ? 'redis://localhost:6379/0' : env.REDIS_URL;
 if (!url) throw new Error('REDIS_URL is not set');
 
 export const redis = new Redis(url, {
   maxRetriesPerRequest: 1,
   enableReadyCheck: true,
-  lazyConnect: false,
+  lazyConnect: building,
   connectTimeout: 3000
 });
 
