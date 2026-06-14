@@ -2,9 +2,10 @@ import { error } from '@sveltejs/kit';
 import { isValidCode } from '$lib/server/surveys/codes';
 import { getSurveyPublic } from '$lib/server/surveys/get';
 import { hasVoted } from '$lib/server/voting/rate-limit';
+import { getOrCreateDeviceToken } from '$lib/server/voting/device-token';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, cookies }) => {
   const code = params.code;
   if (!isValidCode(code)) error(404, 'Опрос не найден');
 
@@ -12,19 +13,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (!survey) error(404, 'Опрос не найден');
 
   const expired = survey.status !== 'active' || new Date(survey.expiresAt).getTime() < Date.now();
-  // Серверная проверка по IP (через Redis) — единственный способ не
-  // показывать форму ответа в другом браузере/инкогнито: localStorage
-  // на клиенте про другой браузер не знает. POST-эндпоинт сам тоже
-  // проверяет hasVoted и возвращает 409 — здесь это превентивно, чтобы
-  // UI сразу показал «вы уже отвечали».
+  // Серверная проверка по per-device токену (через Redis) — единственный способ
+  // не показывать форму ответа в другом браузере/инкогнито: localStorage на
+  // клиенте про другой браузер не знает. POST-эндпоинт сам тоже проверяет по
+  // тому же токену и возвращает 409 — здесь это превентивно, чтобы UI сразу
+  // показал «вы уже отвечали». Токен выдаём здесь же (на просмотре формы),
+  // чтобы POST переиспользовал то же значение.
   let alreadyVoted = false;
   if (!expired) {
     try {
-      // Use the same XFF-resolved client IP as the POST /answer vote path
-      // (locals.clientIp) so the preventive check and the actual vote claim
-      // hash the same address. getClientAddress() returned the proxy IP
-      // behind Caddy, so the preview never matched the real vote.
-      alreadyVoted = await hasVoted(locals.clientIp, code);
+      // Дедуп голоса привязан к per-device токену (nonce-cookie), а не к IP —
+      // иначе класс за общим NAT делил бы один слот. Тот же токен использует
+      // POST /answer при tryClaimVote, поэтому превью и реальный голос
+      // совпадают.
+      const deviceToken = getOrCreateDeviceToken(cookies);
+      alreadyVoted = await hasVoted(deviceToken, code);
     } catch {
       // Redis-проблема не должна ломать сам опрос: разрешаем форму,
       // POST-эндпоинт всё равно перепроверит и вернёт 409 при дубле.

@@ -41,7 +41,22 @@ export const POST: RequestHandler = async ({ request, url, locals, cookies }) =>
   const result = await register(parsed.data);
 
   if (!result.ok) {
-    return json({ error: { code: result.code, message: result.message } }, { status: 409 });
+    // Anti-enumeration: collapse `not_invited` and `email_taken` into one
+    // generic response. Distinct codes/messages would let an attacker probe
+    // which emails are invited and/or already registered. The message still
+    // covers both real cases (no invite vs. account already exists) so the
+    // flow stays usable, and the allowlist UX is preserved — a genuinely
+    // uninvited user is still told to contact an admin.
+    return json(
+      {
+        error: {
+          code: 'registration_unavailable',
+          message:
+            'Регистрация недоступна. Если у вас уже есть аккаунт — войдите, иначе обратитесь к администратору.'
+        }
+      },
+      { status: 409 }
+    );
   }
 
   if (result.status === 'auto_verified') {

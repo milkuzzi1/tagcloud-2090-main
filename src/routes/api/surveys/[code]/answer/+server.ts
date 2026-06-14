@@ -4,6 +4,7 @@ import { SubmitAnswersSchema } from '$lib/server/voting/validation';
 import { validateSubmission } from '$lib/server/voting/validate';
 import { submitAnswers } from '$lib/server/voting/submit';
 import { checkRateLimit, releaseVote, tryClaimVote } from '$lib/server/voting/rate-limit';
+import { getOrCreateDeviceToken } from '$lib/server/voting/device-token';
 import { log } from '$lib/server/log';
 import type { RequestHandler } from './$types';
 
@@ -19,7 +20,7 @@ function statusForError(code: string): number {
   }
 }
 
-export const POST: RequestHandler = async ({ params, request, locals }) => {
+export const POST: RequestHandler = async ({ params, request, locals, cookies }) => {
   const code = params.code!;
   if (!isValidCode(code)) {
     return json(
@@ -29,6 +30,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   }
 
   const ip = locals.clientIp;
+  // Стабильный per-device токен (nonce-cookie) — ключ дедупликации голоса
+  // вместо IP, чтобы класс за общим NAT не делил один слот. Per-IP rate-limit
+  // ниже остаётся как анти-абуз контроль.
+  const deviceToken = getOrCreateDeviceToken(cookies);
 
   // Rate-limit ПЕРЕД любой обработкой — иначе флуд невалидным мусором не лимитируется.
   // Redis — обязательная зависимость голосования: при его падении checkRateLimit
@@ -73,19 +78,22 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     return json({ error: v.error }, { status: statusForError(v.error.code) });
   }
 
-  // Атомарный SET NX: одной командой проверяем «не голосовал ли этот IP» и
-  // занимаем слот. Раньше `hasVoted` + `markVoted` шли двумя командами — два
-  // параллельных запроса с одного IP проходили проверку и оба отправлялись в
-  // submitAnswers. Если SET NX вернул false — слот уже занят (повторный голос).
+  // Атомарный SET NX: одной командой проверяем «не голосовало ли это
+  // устройство» и занимаем слот. Ключ дедупа строится по deviceToken (nonce-
+  // cookie), а не по IP — иначе класс за общим NAT делил бы один слот. Раньше
+  // `hasVoted` + `markVoted` шли двумя командами — два параллельных запроса
+  // проходили проверку и оба отправлялись в submitAnswers. Если SET NX вернул
+  // false — слот уже занят (повторный голос с этого устройства).
   let claimed = true;
   try {
-    claimed = await tryClaimVote(ip, code, v.survey.expiresAt);
+    claimed = await tryClaimVote(deviceToken, code, v.survey.expiresAt);
   } catch (err) {
     // Redis недоступен: вместо 500 на всём эндпоинте — деградируем мягко.
     // Голос важнее идемпотентности на короткое окно недоступности Redis,
     // поэтому принимаем ответ без дедупликации (возможен дубль за время
     // даунтайма Redis). Дедуп восстановится, когда Redis вернётся.
-    log.error('vote_claim_redis_unavailable', { code, err: String(err) });
+    // `degraded: true` — явный маркер деградированного пути для алертов/метрик.
+    log.error('vote_claim_redis_unavailable', { code, degraded: true, err: String(err) });
   }
   if (!claimed) {
     return json(
@@ -102,7 +110,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     // ходит в Redis — если он лёг, не роняем 500, а просто логируем: слот
     // отпустится по TTL.
     try {
-      await releaseVote(ip, code);
+      await releaseVote(deviceToken, code);
     } catch (err) {
       log.error('vote_release_failed', { code, err: String(err) });
     }

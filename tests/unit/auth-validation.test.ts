@@ -25,9 +25,23 @@ describe('CredentialsSchema', () => {
     expect(r.success).toBe(false);
   });
 
-  it('ругается на пароль длиннее 72 (bcrypt limit)', () => {
+  it('ругается на пароль длиннее 72 байт (bcrypt limit)', () => {
     const r = CredentialsSchema.safeParse({ email: 'a@b.com', password: 'x'.repeat(73) });
     expect(r.success).toBe(false);
+  });
+
+  it('ругается на пароль ≤72 символов, но >72 байт (многобайтовые символы)', () => {
+    // 37 кириллических символов = 74 байта в UTF-8 (2 байта на символ): по
+    // символам прошёл бы старый лимит 72, по байтам — нет.
+    const pwd = 'п'.repeat(37);
+    expect(pwd.length).toBeLessThanOrEqual(72);
+    expect(Buffer.byteLength(pwd, 'utf8')).toBeGreaterThan(72);
+    expect(CredentialsSchema.safeParse({ email: 'a@b.com', password: pwd }).success).toBe(false);
+  });
+
+  it('принимает пароль ровно 72 байта', () => {
+    const r = CredentialsSchema.safeParse({ email: 'a@b.com', password: 'x'.repeat(72) });
+    expect(r.success).toBe(true);
   });
 
   it('ругается на невалидный email', () => {

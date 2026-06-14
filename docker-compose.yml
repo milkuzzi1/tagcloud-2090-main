@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-tagcloud}
       # No insecure default: compose fails fast if POSTGRES_PASSWORD is unset,
       # so a forgotten secret can never ship a weak password to production.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (see .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-tagcloud}
     # Loopback only. The app reaches Postgres over the compose network (host
     # "postgres"), so there is no reason to publish 5432 on the public
@@ -28,11 +28,7 @@ services:
     restart: unless-stopped
     # Require a password; fail fast if REDIS_PASSWORD is unset.
     command:
-      [
-        'redis-server',
-        '--requirepass',
-        '${REDIS_PASSWORD:?REDIS_PASSWORD must be set (see .env.example)}'
-      ]
+      ['redis-server', '--requirepass', '${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}']
     # Loopback only — same rationale as Postgres.
     ports:
       - '${REDIS_BIND:-127.0.0.1}:6379:6379'

@@ -24,10 +24,10 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
   const result = await login(parsed.data);
   if (!result.ok) {
     if (result.code === 'email_not_verified') {
-      return json(
-        { error: { code: result.code, message: result.message, email: result.email } },
-        { status: 403 }
-      );
+      // Не возвращаем email обратно: эхо адреса в ответе превращает эндпоинт
+      // в оракул для проверки «зарегистрирован ли такой email». Клиент и так
+      // знает, что ввёл, а сообщение объясняет, что делать.
+      return json({ error: { code: result.code, message: result.message } }, { status: 403 });
     }
     return json({ error: { code: result.code, message: result.message } }, { status: 401 });
   }

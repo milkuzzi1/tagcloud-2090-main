@@ -26,11 +26,12 @@ const MAX_BUFFER_SIZE = 100_000;
 // By default votes are buffered in memory and flushed periodically, keeping
 // the hot /answer path fast. A HARD crash (OOM / kill -9 — not SIGTERM/SIGINT,
 // which we drain via flushPending) can lose up to one buffer of already-acked
-// votes. For the school-survey use case this is an acceptable, conscious
-// trade-off. Deployments where votes are authoritative can set
-// VOTE_DURABLE_WRITES=true to flush synchronously, so a 201 is only returned
-// after the rows are persisted (costs ~1 DB round-trip of latency).
-const DURABLE_WRITES = env.VOTE_DURABLE_WRITES === 'true';
+// votes. Durable writes are therefore ON by default: votes are flushed
+// synchronously, so a 201 is only returned after the rows are persisted (costs
+// ~1 DB round-trip of latency). Deployments that prefer the faster buffered
+// path and accept the crash-loss trade-off can opt out with
+// VOTE_DURABLE_WRITES=false.
+const DURABLE_WRITES = env.VOTE_DURABLE_WRITES !== 'false';
 // Чанк для bulk-INSERT'а: postgres-js по умолчанию имеет лимит ~65k параметров,
 // при batch > ~5k items × 3 поля параметрический предел нарушался → пакет
 // возвращался ошибкой и шёл по retry-петле. 1000 даёт 3000 параметров —

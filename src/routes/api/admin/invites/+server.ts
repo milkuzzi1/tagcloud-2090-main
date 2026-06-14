@@ -16,14 +16,14 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     return json({ error: { code: 'invalid_input', issues: parsed.error.issues } }, { status: 400 });
   }
 
-  // addInvite returns a string: 'added' | 'already_exists' | 'already_member'
+  // addInvite returns { status: 'added' | 'already_exists' | 'already_member', id? }
   const result = await addInvite({
     email: parsed.data.email,
     invitedBy: admin.id,
     note: parsed.data.note
   });
 
-  if (result === 'already_member') {
+  if (result.status === 'already_member') {
     return json(
       { error: { code: 'already_member', message: 'Пользователь уже является участником' } },
       { status: 409 }
@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
   }
 
   // 'added' or 'already_exists' — both are fine, just don't re-send email on duplicate
-  const created = result === 'added';
+  const created = result.status === 'added';
 
   if (created) {
     const baseUrl = resolvePublicBaseUrl(url.origin);
@@ -50,12 +50,13 @@ export const POST: RequestHandler = async ({ request, url, locals }) => {
     }
   }
 
-  // Return a minimal invite object so the UI can add it to the list
+  // Return the invite object (with the real DB row id) so the UI can add it to
+  // the list and DELETE it without a full reload.
   return json(
     {
       ok: true,
       invite: {
-        id: crypto.randomUUID(),
+        id: result.id,
         email: parsed.data.email,
         note: parsed.data.note ?? null,
         registered: false

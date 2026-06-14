@@ -2,7 +2,10 @@ import { and, eq, isNull, ne } from 'drizzle-orm';
 import { db, type Executor } from '../db';
 import { organizationInvites, pendingAdminHandover, sessions, users } from '../schema';
 
-export type AddInviteResult = 'added' | 'already_exists' | 'already_member';
+export type AddInviteResult =
+  | { status: 'added'; id: string }
+  | { status: 'already_exists'; id: string }
+  | { status: 'already_member' };
 
 export type InviteRow = {
   id: string;
@@ -34,7 +37,7 @@ export async function addInvite(params: {
     .where(and(eq(users.email, params.email), isNull(users.deletedAt)))
     .limit(1);
 
-  if (existingUser) return 'already_member';
+  if (existingUser) return { status: 'already_member' };
 
   const result = await db
     .insert(organizationInvites)
@@ -46,7 +49,19 @@ export async function addInvite(params: {
     .onConflictDoNothing()
     .returning({ id: organizationInvites.id });
 
-  return result.length > 0 ? 'added' : 'already_exists';
+  if (result.length > 0) {
+    return { status: 'added', id: result[0].id };
+  }
+
+  // Conflict: a row for this email already exists. Look up its real id so the
+  // caller (and UI) can act on it (e.g. DELETE) without a full reload.
+  const [existingInvite] = await db
+    .select({ id: organizationInvites.id })
+    .from(organizationInvites)
+    .where(eq(organizationInvites.email, params.email))
+    .limit(1);
+
+  return { status: 'already_exists', id: existingInvite.id };
 }
 
 export async function removeInvite(params: { inviteId: string }): Promise<boolean> {

@@ -1,9 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { env } from '$env/dynamic/private';
 import { redis } from '../redis';
+import { voteDedupKey } from './dedup-key';
 
 const SALT_TTL_SEC = 48 * 60 * 60;
 const RATE_WINDOW_SEC = 60;
-const RATE_MAX = 30;
+// Потолок голосовалок: 30 запросов/мин с одного IP по умолчанию. За одним NAT
+// (школьный класс) бурст может быть выше — лимит конфигурируется через
+// VOTE_RATE_MAX, не трогая дедупликацию (она теперь per-device, см. ниже).
+const RATE_MAX = ((): number => {
+  const n = Number(env.VOTE_RATE_MAX);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 30;
+})();
 const MIN_VOTED_TTL_SEC = 60;
 
 // Auth-эндпоинты — отдельные более жёсткие бакеты, чтобы перебор пароля
@@ -62,7 +70,7 @@ async function ipHash(ip: string): Promise<string> {
   return createHash('sha256').update(`${ip}:${salt}`).digest('hex');
 }
 
-// --- Survey-stable IP hash for vote dedup ----------------------------------
+// --- Survey-stable salt for vote dedup -------------------------------------
 //
 // `ipHash` above mixes in a DAILY-rotating salt (good for privacy on the
 // short-lived rate-limit / auth buckets). The `voted:` dedup key must instead
@@ -70,6 +78,11 @@ async function ipHash(ip: string): Promise<string> {
 // midnight would otherwise re-hash the same client to a new value the next day
 // and let them vote again. Vote dedup therefore uses a PER-SURVEY salt created
 // once and kept (with a generous cap) for the survey's lifetime.
+//
+// NB: the dedup key is built from a PER-DEVICE token (nonce cookie), NOT the
+// client IP — see dedup-key.ts. A whole classroom behind one NAT shares an IP,
+// so IP-based dedup blocked every voter after the first. The per-IP rate limit
+// (checkRateLimit) stays as the anti-abuse backstop.
 const SURVEY_SALT_TTL_SEC = 90 * 24 * 60 * 60;
 
 const surveySaltCache = new Map<string, string>();
@@ -89,9 +102,9 @@ async function getOrCreateSurveySalt(code: string): Promise<string> {
   return value;
 }
 
-async function voteIpHash(ip: string, code: string): Promise<string> {
+async function votedKey(deviceToken: string, code: string): Promise<string> {
   const salt = await getOrCreateSurveySalt(code);
-  return createHash('sha256').update(`${ip}:${salt}`).digest('hex');
+  return voteDedupKey(deviceToken, salt, code);
 }
 
 // Lua-скрипт: атомарный INCR + EXPIRE при первом увеличении.
@@ -132,33 +145,40 @@ export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
   return { allowed: true };
 }
 
-export async function hasVoted(ip: string, code: string): Promise<boolean> {
-  const hash = await voteIpHash(ip, code);
-  return (await redis.exists(`voted:${hash}:${code}`)) === 1;
+export async function hasVoted(deviceToken: string, code: string): Promise<boolean> {
+  return (await redis.exists(await votedKey(deviceToken, code))) === 1;
 }
 
-export async function markVoted(ip: string, code: string, expiresAt: Date): Promise<void> {
-  const hash = await voteIpHash(ip, code);
+export async function markVoted(deviceToken: string, code: string, expiresAt: Date): Promise<void> {
+  const key = await votedKey(deviceToken, code);
   const ttlSec = Math.max(MIN_VOTED_TTL_SEC, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
-  await redis.setex(`voted:${hash}:${code}`, ttlSec, '1');
+  await redis.setex(key, ttlSec, '1');
 }
 
 /**
  * Атомарно «занять» голос: SET key 1 NX EX ttl. Возвращает true, если ключ
- * был успешно создан (этот IP ещё не голосовал), и false, если уже голосовал.
+ * был успешно создан (это устройство ещё не голосовало), и false, если уже
+ * голосовало.
+ *
+ * Ключ строится по ПЕР-УСТРОЙСТВЕННОМУ токену (nonce-cookie), а не по IP —
+ * иначе ученики за общим NAT блокировали бы друг друга. См. dedup-key.ts.
  *
  * Заменяет пару `hasVoted` + `markVoted`: между ними был узкий race window —
- * два параллельных запроса с одного IP проходили `hasVoted=false` и оба
+ * два параллельных запроса с одного устройства проходили `hasVoted=false` и оба
  * отправлялись в `submitAnswers` (двойной голос). NX делает проверку и запись
  * в одной команде Redis.
  *
  * Если БД/Redis потом отдают ошибку (overloaded), нужно явно освободить ключ
  * через `releaseVote`, чтобы клиент мог попробовать заново.
  */
-export async function tryClaimVote(ip: string, code: string, expiresAt: Date): Promise<boolean> {
-  const hash = await voteIpHash(ip, code);
+export async function tryClaimVote(
+  deviceToken: string,
+  code: string,
+  expiresAt: Date
+): Promise<boolean> {
+  const key = await votedKey(deviceToken, code);
   const ttlSec = Math.max(MIN_VOTED_TTL_SEC, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
-  const r = await redis.set(`voted:${hash}:${code}`, '1', 'EX', ttlSec, 'NX');
+  const r = await redis.set(key, '1', 'EX', ttlSec, 'NX');
   return r === 'OK';
 }
 
@@ -167,9 +187,8 @@ export async function tryClaimVote(ip: string, code: string, expiresAt: Date): P
  * 5xx), чтобы клиент мог ретрайнуть. Без этого `tryClaimVote` оставлял бы
  * запись на TTL, и пользователь видел бы 409 «Уже голосовали» при повторе.
  */
-export async function releaseVote(ip: string, code: string): Promise<void> {
-  const hash = await voteIpHash(ip, code);
-  await redis.del(`voted:${hash}:${code}`);
+export async function releaseVote(deviceToken: string, code: string): Promise<void> {
+  await redis.del(await votedKey(deviceToken, code));
 }
 
 /**
